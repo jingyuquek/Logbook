@@ -1,0 +1,82 @@
+{% extends "taskbar.html" %}
+{% block title %}Company Members{% endblock %}
+{% block content %}
+<div class="card">
+    <h2>Approved Members of {{ company.name }}</h2>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr><th>Username</th><th>Role</th>{% if user.role == 'admin' %}<th style="text-align:right;">Actions</th>{% endif %}</tr>
+            </thead>
+            <tbody>
+                {% for member in users %}
+                <tr>
+                    <td>{{ member.username }}</td>
+                    <td class="role-{{ member.role }}">{{ member.role | capitalize }}</td>
+                    {% if user.role == 'admin' %}<td style="text-align:right;"><button class="btn-assign" onclick="openAssignModal({{ member.id }})">Assign Task</button></td>{% endif %}
+                </tr>
+                {% else %}<tr><td colspan="3">No approved members found.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if user.role == 'admin' %}
+<div id="assignTaskModal" class="modal">
+    <div class="modal-content">
+        <h3 style="margin-top:0; color:#fff; border-bottom:1px solid #333; padding-bottom:10px;">Assign Task</h3>
+        <form method="POST" action="{{ url_for('assign_task', user_id=0) }}">
+            <input type="hidden" name="user_id" id="assignUserId">
+            <label>Task Type</label>
+            <select name="task_type" required>
+                <option value="" disabled selected>Select task</option>
+                <option value="Weekly PMCS">Weekly PMCS</option>
+                <option value="Monthly PMCS">Monthly PMCS</option>
+                <option value="AOS">AOS</option>
+                <option value="BOS">BOS</option>
+                <option value="TOP UP POL">TOP UP POL</option>
+            </select>
+            <label>Vehicle</label>
+            <select name="vehicle_id" required>
+                <option value="" disabled selected>Select vehicle</option>
+                {% for v in vehicles %}{% if v.company_id == user.company_id %}<option value="{{ v.id }}">{{ v.license_plate }}</option>{% endif %}{% endfor %}
+            </select>
+            <div class="modal-actions">
+                <button type="submit" class="btn-primary">Confirm Assignment</button>
+                <button type="button" class="btn-secondary" onclick="closeAssignModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+<style>
+    .card { background:#1e1e1e; border-radius:10px; padding:20px; margin-top:24px; }
+    .table-wrapper { overflow-x:auto; max-height:500px; }
+    table { width:100%; border-collapse:collapse; font-size:0.9rem; }
+    th, td { padding:12px; border-bottom:1px solid #333; text-align:left; color:#e0e0e0; }
+    th { background:#1f1f1f; color:#bdbdbd; position:sticky; top:0; z-index:2; }
+    tr:hover td { background:#242424; }
+    .role-admin { color:#ff8a65; font-weight:600; } .role-manager { color:#ffd54f; font-weight:600; } .role-user { color:#81d4fa; }
+    .btn-assign { background:#4fc3f7; color:#121212; padding:6px 12px; border-radius:6px; font-size:0.8rem; font-weight:600; border:none; cursor:pointer; transition:0.2s; }
+    .btn-assign:hover { background:#29b6f6; box-shadow:0 0 10px rgba(79,195,247,0.4); }
+    
+    /* Improved Modal UI */
+    .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); justify-content:center; align-items:center; z-index:2000; backdrop-filter:blur(4px); }
+    .modal-content { background:#121212; padding:25px; border-radius:12px; width:340px; border:1px solid #333; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
+    .modal-content label { display:block; font-size:0.75rem; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }
+    .modal-content select { width:100%; margin-bottom:20px; padding:10px; background:#1e1e1e; border:1px solid #444; color:#fff; border-radius:6px; outline:none; }
+    .modal-content select:focus { border-color:#4fc3f7; }
+    .modal-actions { display:flex; flex-direction:column; gap:10px; }
+    .btn-primary { background:#6200ee; color:#fff; padding:10px; border:none; border-radius:6px; font-weight:bold; cursor:pointer; }
+    .btn-secondary { background:transparent; color:#888; padding:8px; border:none; cursor:pointer; font-size:0.85rem; }
+    .btn-secondary:hover { color:#fff; }
+</style>
+
+<script>
+    const taskM = document.getElementById("assignTaskModal");
+    function openAssignModal(id) { document.getElementById("assignUserId").value = id; taskM.style.display = "flex"; }
+    function closeAssignModal() { taskM.style.display = "none"; }
+    window.onclick = (e) => { if(e.target == taskM) closeAssignModal(); }
+</script>
+{% endblock %}

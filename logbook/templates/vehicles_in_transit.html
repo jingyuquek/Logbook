@@ -1,0 +1,79 @@
+{% extends "taskbar.html" %}
+{% block title %}Vehicles in Transit{% endblock %}
+{% block content %}
+<style>
+    .t-con { padding: 24px; font-family: system-ui, Arial; }
+    .t-sec { background: #1e1e1e; border-radius: 10px; padding: 20px; margin-bottom: 30px; }
+    .t-tab { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    .t-tab th, .t-tab td { padding: 12px; border-bottom: 1px solid #333; text-align: left; }
+    .t-tab th { color: #9e9e9e; font-size: 0.8rem; text-transform: uppercase; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: #fbc02d; color: #000; }
+    .btn { text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; font-weight: bold; border: none; cursor: pointer; color: #fff; display: inline-block; }
+    .btn-ok { background: #4caf50; } 
+    .btn-del { background: #f44336; }
+    .action-group { display: flex; gap: 8px; align-items: center; }
+    .empty { color: #757575; padding: 20px; text-align: center; font-style: italic; }
+</style>
+
+<div class="t-con">
+    <h2>Vehicles in Transit</h2>
+
+    <div class="t-sec">
+        <h3>📥 Incoming (To be Accepted)</h3>
+        <table class="t-tab">
+            <thead><tr><th>MID</th><th>From Unit/Coy</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for v in incoming %}
+                <tr>
+                    <td><strong>{{ v.license_plate }}</strong></td>
+                    <td>
+                        {% if v.previous_company and v.previous_company.unit %}
+                            {{ v.previous_company.unit.name }} ({{ v.previous_company.name }})
+                        {% else %}
+                            <span style="color:#ef5350;">Unknown Source</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge">Awaiting Takeover</span></td>
+                    <td>
+                        <div class="action-group">
+                            <a href="{{ url_for('logbook', license_plate=v.license_plate, takeover_from=v.previous_company_id) }}" class="btn btn-ok">Process Takeover</a>
+                            
+                            <form action="{{ url_for('reject_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Reject this vehicle and return it to sender?');">
+                                <button type="submit" class="btn btn-del">Reject</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}<tr><td colspan="4" class="empty">No incoming vehicles.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="t-sec">
+        <h3>📤 Outgoing (Pending Acceptance)</h3>
+        <table class="t-tab">
+            <thead><tr><th>MID</th><th>To Unit/Coy</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+                {% for v in outgoing %}
+                <tr>
+                    <td><strong>{{ v.license_plate }}</strong></td>
+                    <td>
+                        {% if v.target_company and v.target_company.unit %}
+                            {{ v.target_company.unit.name }} ({{ v.target_company.name }})
+                        {% else %}
+                            <span style="color:#ef5350;">Invalid Target</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge">In Transit</span></td>
+                    <td>
+                        <form action="{{ url_for('cancel_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Cancel this handover?');">
+                            <button type="submit" class="btn btn-del">Cancel</button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}<tr><td colspan="4" class="empty">No outgoing vehicles.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

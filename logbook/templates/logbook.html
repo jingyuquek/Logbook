@@ -1,0 +1,248 @@
+{% extends "taskbar.html" %}
+{% block content %}
+<head>
+    <title>Logbook</title>
+    <style>
+        th, td { padding: 10px 10px; border-bottom: 1px solid #333; text-align: left; vertical-align: middle; }
+        body { background:#121212; color:#e0e0e0; font-family:system-ui, Arial; padding:24px; }
+        .header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .card { background:#1e1e1e; border-radius:10px; padding:20px; margin-bottom:24px; }
+        .logbook-form { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:14px 18px; align-items:end; }
+        .field { display:flex; flex-direction:column; font-size:0.85rem; }
+        .field label { margin-bottom:4px; color:#bdbdbd; }
+        input, select { background:#1f1f1f; color:#e0e0e0; border:1px solid #333; border-radius:6px; padding:7px 9px; font-size:1rem; }
+        input[readonly], .locked-field { background:#2a2a2a!important; color:#9e9e9e; }
+        button { background:#6200ee; color:#fff; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; }
+        .btn-back { background:#333; color:#fff; text-decoration:none; padding:8px 14px; border-radius:6px; font-size:0.85rem; }
+        
+        /* Table Adjustments */
+        table { width:100%; border-collapse:collapse; font-size:0.8rem; table-layout: fixed; }
+        .col-purpose { width: 150px; white-space: normal; line-height: 1.4; word-wrap: break-word; }
+        .col-date { width: 90px; }
+        .col-driver { width: 120px; }
+        
+        .row-top-up { color: #ff5252 !important; }
+        .row-transit { background: rgba(251, 192, 45, 0.1) !important; color: #fbc02d !important; }
+        .table-wrapper { overflow-x:auto; max-height:420px; }
+        .btn-delete-small { background:#6200ee; color:#fff; border:none; padding:6px 10px; border-radius:6px; cursor:pointer; }
+    </style>
+</head>
+<body>
+
+<div class="header-row">
+    <h2>Vehicle Logbook: {{ vehicle.license_plate }}</h2>
+    <a href="{{ url_for('view_vehicle', license_plate=vehicle.license_plate) }}" class="btn-back">← Back to Vehicle</a>
+</div>
+
+<div class="card">
+    <form method="POST" action="{{ request.full_path }}" class="logbook-form">
+        <div class="field">
+            <label>Date</label>
+            <input type="date" name="date" value="{{ request.form.get('date', today) }}" required>
+        </div>
+
+        <div class="field">
+            <label>To</label>
+            <input type="text" name="location" value="{{ request.form.get('location', '') }}" required>
+        </div>
+
+        <div class="field">
+            <label>Purpose</label>
+            {% if request.args.get('handover_to') %}
+                <input type="text" name="action_type" value="HANDOVER TO {{ target_name }}" class="locked-field" readonly>
+            {% elif request.args.get('takeover_from') %}
+                <input type="text" name="action_type" value="TAKEOVER FROM {{ source_name }}" class="locked-field" readonly>
+            {% else %}
+                <input list="purpose-options" id="purpose" name="action_type" value="{{ request.form.get('action_type', '') }}" placeholder="Type or Select..." required>
+                <datalist id="purpose-options">
+                    <option value="WEEKLY PMCS"><option value="MONTHLY PMCS"><option value="COMMS CHECK"><option value="BOS"><option value="AOS"><option value="TOP UP POL">
+                </datalist>
+            {% endif %}
+        </div>
+
+        {% if request.args.get('takeover_from') %}
+        <div class="field">
+            <label>Assign to Store</label>
+            <select name="new_store_id" required>
+                <option value="">Select Store...</option>
+                {% for store in stores %}
+                    <option value="{{ store.id }}" {{ 'selected' if request.form.get('new_store_id')|int == store.id else '' }}>{{ store.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+
+        <div class="field"><label>Start Time (HHMM)</label><input type="text" id="st" name="start_time" value="{{ request.form.get('start_time', '') }}" maxlength="4" required></div>
+        <div class="field"><label>End Time (HHMM)</label><input type="text" id="et" name="end_time" value="{{ request.form.get('end_time', '') }}" maxlength="4"></div>
+        <div class="field"><label>Travelling Time (mins)</label><input type="number" id="mv" name="moving_time" value="{{ request.form.get('moving_time', '') }}" step="any"></div>
+        <div class="field"><label>Stationary Running Time (mins)</label><input type="number" id="sr" name="stationary_time" value="{{ request.form.get('stationary_time', '') }}" step="any"></div>
+        
+        <div class="field"><label>Meter Reading</label><input type="number" name="meter_reading" id="mr" value="{{ request.form.get('meter_reading', prev_meter) }}" step="any"></div>
+        <div class="field"><label>Km/Miles</label><input type="text" id="km" readonly></div>
+        
+        <div class="field"><label>Fuel Received</label><input type="number" id="fr" name="fuel_received" value="{{ request.form.get('fuel_received', '') }}" step="0.01" readonly></div>
+        <div class="field"><label>Type of Fuel</label><input type="text" id="tf" name="fuel_type" value="{{ request.form.get('fuel_type', '') }}" readonly></div>
+        
+        <div class="field"><label>PO/SO</label><input type="number" id="ps" name="poso" value="{{ request.form.get('poso', prev_poso) }}" step="any"></div>
+        
+        <div class="field"><label>Driver No./Name</label><input type="text" name="driver_name" value="{{ request.form.get('driver_name', username) }}" required></div>
+        <div class="field"><label>Name of Person Accompanying</label><input type="text" name="accompanying_name" value="{{ request.form.get('accompanying_name', '') }}"></div>
+        
+        <div class="field"><button type="submit">{% if request.args.get('takeover_from') %}Authorize & Accept{% else %}Save Entry{% endif %}</button></div>
+    </form>
+</div>
+
+<div class="card">
+    <h3>History</h3>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th class="col-date">Date</th>
+                    <th>To</th>
+                    <th class="col-purpose">Purpose</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Trav. Time</th>
+                    <th>Stat. Run</th>
+                    <th>Meter</th>
+                    <th>Km/Miles</th>
+                    <th>Fuel</th>
+                    <th>Type</th>
+                    <th>PO/SO</th>
+                    <th class="col-driver">Driver</th>
+                    {% if user.role == 'admin' %}<th>Admin</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in logbook %}
+                <tr class="{{ 'row-top-up' if entry.action_type == 'TOP UP POL' else '' }} {{ 'row-transit' if 'HANDOVER' in entry.action_type or 'TAKEOVER' in entry.action_type else '' }}">
+                    <td>{{ entry.date }}</td>
+                    <td>{{ entry.location }}</td>
+                    <td class="col-purpose">{{ entry.action_type }}</td>
+                    <td>{{ entry.start_time }}</td>
+                    <td>{{ entry.end_time or "-" }}</td>
+                    <td>{{ entry.moving_time if entry.moving_time is not none else "-" }}</td>
+                    <td>{{ entry.stationary_time if entry.stationary_time is not none else "-" }}</td>
+                    <td>{{ entry.meter_reading or "-" }}</td>
+                    <td>
+                        {% set prev_e = logbook[loop.index] if not loop.last else none %}
+                        {% if entry.meter_reading and prev_e and prev_e.meter_reading %}
+                            {{ (entry.meter_reading|float - prev_e.meter_reading|float)|round(1) }}
+                        {% else %}-{% endif %}
+                    </td>
+                    <td>{{ entry.fuel_received if entry.fuel_received is not none else "-" }}</td>
+                    <td>{{ entry.fuel_type or "-" }}</td>
+                    <td>{{ entry.poso if entry.poso is not none else "-" }}</td>
+                    <td>{{ entry.driver_name }}</td>
+                    {% if user.role == 'admin' %}
+                    <td>
+                        <form action="{{ url_for('delete_logbook_entry', entry_id=entry.id) }}" method="POST" onsubmit="return confirm('Delete?');">
+                            <button type="submit" class="btn-delete-small">🗑️</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const pM = parseFloat("{{ prev_meter }}") || 0, pP = parseFloat("{{ prev_poso }}") || 0;
+    const p = document.getElementById("purpose"), sr = document.getElementById("sr"), st = document.getElementById("st"), et = document.getElementById("et");
+    const mr = document.getElementById("mr"), km = document.getElementById("km"), ps = document.getElementById("ps"), mv = document.getElementById("mv"), fr = document.getElementById("fr"), tf = document.getElementById("tf");
+
+    // NEW: Check for URL parameter 'purpose' from My Tasks
+    const urlParams = new URLSearchParams(window.location.search);
+    const purposeHint = urlParams.get('purpose');
+    if (purposeHint && p) {
+        p.value = purposeHint.toUpperCase();
+    }
+
+    function calcTimes() {
+        const v = (p ? p.value : "").toUpperCase() || "{{ request.args.get('handover_to') or request.args.get('takeover_from') or '' }}".toUpperCase(), sT = st.value;
+        if (sT.length === 4) {
+            let base = v.includes("WEEKLY") || v.includes("MONTHLY") ? 25 : (v === "BOS" ? 15 : (v === "AOS" ? 10 : (v === "COMMS CHECK" ? 5 : 0)));
+            let travel = parseInt(mv.value) || 0, totalAdd = base + travel;
+            if (totalAdd > 0) {
+                let h = parseInt(sT.slice(0,2)), m = parseInt(sT.slice(2)), tot = h*60+m+totalAdd;
+                et.value = String(Math.floor(tot/60)%24).padStart(2,"0")+String(tot%60).padStart(2,"0");
+            }
+        }
+    }
+
+    function updateKM() { 
+        let diff = (parseFloat(mr.value) || 0) - pM; 
+        km.value = diff > 0 ? (Math.round(diff * 10) / 10) : ""; 
+    }
+
+    function checkFuelState(v) {
+        if (v === "TOP UP POL") {
+            fr.readOnly = false; fr.style.background="#1f1f1f";
+            tf.readOnly = false; tf.style.background="#1f1f1f";
+        } else {
+            fr.readOnly = true; fr.style.background="#2a2a2a"; fr.value="";
+            tf.readOnly = true; tf.style.background="#2a2a2a"; tf.value="";
+        }
+    }
+
+    function handlePurposeChange() {
+        const v = p.value.toUpperCase(); 
+        sr.readOnly = false; mv.readOnly = false;
+        checkFuelState(v);
+        if (v.includes("WEEKLY") || v.includes("MONTHLY")) { sr.value=25; ps.value=(pP+0.4).toFixed(1); }
+        else if (v === "BOS") { sr.value=15; ps.value=(pP+0.2).toFixed(1); }
+        else if (v === "AOS") { sr.value=""; ps.value=pP.toFixed(1); }
+        else if (v === "COMMS CHECK" || v === "TOP UP POL") { mv.readOnly = true; sr.readOnly = true; if(v === "COMMS CHECK") sr.value=""; }
+        calcTimes();
+    }
+
+    if(p) {
+        p.addEventListener("input", handlePurposeChange);
+        // Run on load to trigger logic for auto-selected or sticky values
+        handlePurposeChange(); 
+    }
+
+    st.addEventListener("input", calcTimes); 
+    mv.addEventListener("input", calcTimes); 
+    mr.addEventListener("input", updateKM); 
+    updateKM();
+});
+
+// Final Validation Script
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    function parseHHMM(tStr) {
+        if (!tStr) return null;
+        let clean = tStr.replace(":", "").padStart(4, '0');
+        return new Date(1970, 0, 1, parseInt(clean.substring(0, 2)), parseInt(clean.substring(2, 4)));
+    }
+
+    form.addEventListener('submit', function(e) {
+        const startVal = document.getElementById('st').value;
+        const endVal = document.getElementById('et').value;
+        const moving = parseInt(document.getElementById('mv').value) || 0;
+        const stationary = parseInt(document.getElementById('sr').value) || 0;
+
+        if (startVal && endVal) {
+            const start = parseHHMM(startVal);
+            const end = parseHHMM(endVal);
+            const durationMins = (end - start) / 60000;
+            const requiredMins = moving + stationary;
+
+            if (durationMins < 0) {
+                alert("Error: End time cannot be earlier than start time.");
+                e.preventDefault();
+            } else if (durationMins < requiredMins) {
+                alert(`Validation Failed: Total task duration is ${durationMins} mins, but engine run time requires ${requiredMins} mins.`);
+                e.preventDefault();
+            }
+        }
+    });
+});
+</script>
+</body>
+{% endblock %}

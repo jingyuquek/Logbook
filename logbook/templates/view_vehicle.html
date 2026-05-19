@@ -1,0 +1,165 @@
+{% extends "taskbar.html" %} 
+{% block title %}{{ vehicle.license_plate }}{% endblock %} 
+{% block content %}
+<style>
+  .vh-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: center; margin-bottom: 20px; }
+  .vh-center { text-align: center; } .vh-right { text-align: right; }
+  .vh-value { font-size: 0.95rem; font-weight: 500; }
+  .shutter-form { display: flex; gap: 6px; justify-content: flex-end; }
+  .shutter-input { width: 60px; padding: 4px; border-radius: 4px; border: 1px solid #333; background: #121212; color: #e0e0e0; text-align: center; }
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
+  .modal-content { background: #1e1e1e; padding: 20px; border-radius: 10px; width: 320px; }
+  .modal-content input { width: 100%; margin: 8px 0; background: #2a2a2a; border: 1px solid #333; color: #e0e0e0; padding: 8px; border-radius: 6px; box-sizing: border-box; }
+  .v-layout { display: grid; grid-template-columns: 3fr 1fr; gap: 20px; }
+  .panel { background: #1e1e1e; padding: 20px; border-radius: 10px; }
+  .s-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .s-table th, .s-table td { padding: 10px; border-bottom: 1px solid #333; text-align: left; }
+  .s-table th { color: #9e9e9e; font-size: 0.75rem; }
+  .row-top-up { color: #ff5252; }
+  .row-transit { color: #fbc02d; background: rgba(251, 192, 45, 0.1); }
+  .side-actions { display: flex; flex-direction: column; gap: 30px; } 
+  .side-btn { text-decoration: none; padding: 12px; border-radius: 6px; background: #2a2a2a; color: #e0e0e0; text-align: center; font-size: 0.9rem; border:none; cursor:pointer; }
+  .side-btn:hover { background: #3a3a3a; }
+  .side-btn.danger { background: #c62828; } .side-btn.half { flex: 1; }
+  .side-row { display: flex; gap: 8px; } .side-row form { flex: 1; display: flex; }
+  .ok { color: #4caf50; } .bad { color: #f44336; } .muted { color: #757575; font-size: 0.8rem; }
+</style>
+
+<div class="v-layout">
+  <div class="panel">
+    <div class="vh-grid">
+      <div><h2>MID {{ vehicle.license_plate }}</h2></div>
+      <div class="vh-center"><span class="vh-value">{{ vehicle.store.name if vehicle.store else 'Unassigned' }}</span></div>
+      <div style="display: flex; justify-content: flex-end; align-items: center; width: 100%;">
+          {% if user.role in ['admin', 'manager'] %}
+          <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="vh-label">Shutter:</span>
+              <form method="POST" action="{{ url_for('update_shutter', vehicle_id=vehicle.id) }}" class="shutter-form" style="display: flex; gap: 5px; margin: 0;">
+                  <input type="text" 
+                        name="shutter_number" 
+                        value="{{ vehicle.shutter_number or '' }}" 
+                        class="shutter-input" 
+                        maxlength="5"
+                        style="width: 60px;"
+                        oninput="this.value = this.value.replace(/[^A-Za-z0-9]/g, '')">
+                  <button type="submit" class="side-btn" style="padding:4px 8px; font-size:0.75rem;">Save</button>
+              </form>
+          </div>
+          {% else %}
+              <span class="vh-label">Shutter:</span>
+              <span class="vh-value" style="margin-left: 8px;">{{ vehicle.shutter_number or '—' }}</span>
+          {% endif %}
+      </div>
+    </div>
+
+    <h3>Generator Run</h3>
+    <table class="s-table">
+      <thead><tr><th>Date</th><th>Done By</th><th>Status</th></tr></thead>
+      <tbody>
+        {% if last_genrun %}
+        <tr>
+          <td>{{ last_genrun.performed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>{{ last_genrun.performed_by.username }}</td>
+          <td class="{{ 'ok' if genrun_valid else 'bad' }}">{{ '✔ Valid' if genrun_valid else '✖ Expired' }}</td>
+        </tr>
+        {% else %}<tr><td colspan="3" class="muted">No gen run recorded</td></tr>{% endif %}
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:30px;">Recent Logbook</h3>
+    <table class="s-table">
+      <thead><tr><th>Date</th><th>Time</th><th>Done By</th><th>Action</th></tr></thead>
+      <tbody>
+        {% for log in logbooks %}
+        <tr class="{{ 'row-top-up' if log.action_type == 'TOP UP POL' else '' }} {{ 'row-transit' if 'HANDOVER' in log.action_type or 'TAKEOVER' in log.action_type else '' }}">
+          <td>{{ log.date }}</td><td>{{ log.start_time }}</td><td>{{ log.driver_name }}</td><td>{{ log.action_type }}</td>
+        </tr>
+        {% else %}<tr><td colspan="4" class="muted">No entries recorded.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="side-actions">
+    <a href="{{ url_for('logbook', license_plate=vehicle.license_plate) }}" class="side-btn">➕ Add Logbook Entry</a>
+    <a href="{{ url_for('view_faults', license_plate=vehicle.license_plate) }}" class="side-btn">🛠 View Faults</a>
+    <button class="side-btn" onclick="openPfe()">🔥 PFE / FFE Status</button>
+    
+    <div class="side-row">
+    <button type="button" class="side-btn half" onclick="openGenRunConfirm()">⚡ Gen Run</button>
+    
+    <form method="POST" action="{{ url_for('toggle_vor', vehicle_id=vehicle.id) }}">
+      <button type="submit" class="side-btn half {{ 'danger' if vehicle.is_vor else '' }}">{{ '🟢 Clear VOR' if vehicle.is_vor else '🚫 Set VOR' }}</button>
+    </form>
+  </div>
+
+    {% if user.role == 'admin' %}
+    <button class="side-btn" style="background: #fbc02d; color: #000;" onclick="openHandover()">🤝 Handover Vehicle</button>
+    {% endif %}
+  </div>
+</div>
+
+<div id="handoverM" class="modal"><div class="modal-content">
+  <h3>Initiate Handover</h3>
+  <form method="POST" action="{{ url_for('initiate_handover', vehicle_id=vehicle.id) }}">
+    <input type="hidden" name="lp" value="{{ vehicle.license_plate }}">
+    <label class="muted">Target Unit Name</label>
+    <input type="text" name="unit_name" placeholder="e.g. 1st Battalion" required>
+    <label class="muted">Target Company Name</label>
+    <input type="text" name="company_name" placeholder="e.g. Alpha Coy" required>
+    <div class="side-row" style="margin-top:15px;">
+      <button type="submit" class="side-btn half" style="background:#6200ee;">Proceed to Log</button>
+      <button type="button" class="side-btn half" onclick="closeHandover()">Cancel</button>
+    </div>
+  </form>
+</div></div>
+
+<div id="pfeM" class="modal"><div class="modal-content">
+  <h3>PFE / FFE Expiry</h3>
+  <form method="POST" action="{{ url_for('update_pfe', license_plate=vehicle.license_plate) }}">
+    <label class="muted">F/PFE</label><input type="date" name="fpfe_expiry" value="{{ vehicle.fpfe_expiry.isoformat() if vehicle.fpfe_expiry else '' }}">
+    <label class="muted">R/PFE</label><input type="date" name="rpfe_expiry" value="{{ vehicle.rpfe_expiry.isoformat() if vehicle.rpfe_expiry else '' }}">
+    <label class="muted">FFE</label><input type="date" name="ffe_expiry" value="{{ vehicle.ffe_expiry.isoformat() if vehicle.ffe_expiry else '' }}">
+    <div class="side-row" style="margin-top:15px;">
+      <button type="submit" class="side-btn half" style="background:#6200ee;">Save</button>
+      <button type="button" class="side-btn half" onclick="closePfe()">Close</button>
+    </div>
+  </form>
+</div></div>
+
+<div id="genRunM" class="modal">
+  <div class="modal-content" style="text-align: center; border-top: 4px solid #6200ee;">
+    <h1 style="margin: 0; font-size: 2rem;">⚡</h1>
+    <h3 style="margin-top: 10px;">Confirm Generator Run?</h3>
+    <p class="muted">This will record a new generator maintenance entry for today.</p>
+    
+    <div class="side-row" style="margin-top:20px;">
+      <form id="genRunForm" method="POST" action="{{ url_for('perform_gen_run', vehicle_id=vehicle.id) }}">
+        <button type="submit" class="side-btn half" style="background:#6200ee; width: 100%;">Confirm</button>
+      </form>
+      <button type="button" class="side-btn half" onclick="closeGenRunConfirm()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const m = document.getElementById("pfeM");
+  const h = document.getElementById("handoverM");
+  const g = document.getElementById("genRunM"); // New Gen Run Modal reference
+  
+  function openPfe() { m.style.display = "flex"; }
+  function closePfe() { m.style.display = "none"; }
+  
+  function openHandover() { h.style.display = "flex"; }
+  function closeHandover() { h.style.display = "none"; }
+
+  // New Gen Run functions
+  function openGenRunConfirm() { g.style.display = "flex"; }
+  function closeGenRunConfirm() { g.style.display = "none"; }
+  
+  window.onclick = (e) => { 
+    if(e.target == m) closePfe(); 
+    if(e.target == h) closeHandover();
+    if(e.target == g) closeGenRunConfirm(); // Close if clicking outside
+  }
+</script>
+{% endblock %}
