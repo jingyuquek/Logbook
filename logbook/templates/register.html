@@ -46,13 +46,8 @@
             <option value="user">User</option>
         </select>
 
-        <label>Unit:</label>
-        <select name="unit_name" id="unitSelect" required>
-            <option value="">-- Select Unit --</option>
-            {% for unit in units %}
-                <option value="{{ unit.name }}">{{ unit.name }}</option>
-            {% endfor %}
-        </select>
+        <label>Unit Name:</label>
+        <input type="text" name="unit_name" id="unitInput" required placeholder="e.g. 1st Battalion">
 
         <div id="unitPasscodeDiv" class="hidden">
             <label>Unit Passcode:</label>
@@ -60,19 +55,8 @@
         </div>
 
         <div id="companyDiv" class="hidden">
-            <label>Company:</label>
-            <select name="company_name" id="companySelect">
-                <option value="">-- Select Company --</option>
-                {% for unit in units %}
-                    {% for company in unit.companies %}
-                        <option value="{{ company.name }}" 
-                                class="company-option" 
-                                data-unit="{{ unit.name }}">
-                            {{ company.name }}
-                        </option>
-                    {% endfor %}
-                {% endfor %}
-            </select>
+            <label>Company Name:</label>
+            <input type="text" name="company_name" id="companyInput" placeholder="e.g. Alpha Coy">
         </div>
 
         <div id="companyPasscodeDiv" class="hidden">
@@ -90,55 +74,31 @@
 
 <script>
     const roleSelect = document.getElementById("roleSelect");
-    const unitSelect = document.getElementById("unitSelect");
     const unitPassDiv = document.getElementById("unitPasscodeDiv");
     const companyDiv = document.getElementById("companyDiv");
     const companyPassDiv = document.getElementById("companyPasscodeDiv");
-    const companySelect = document.getElementById("companySelect");
-    const companyOptions = document.querySelectorAll(".company-option");
+    const companyInput = document.getElementById("companyInput");
 
-    // Function to handle showing/hiding main containers based on role
     function toggleSections() {
         const role = roleSelect.value;
         
-        // Hide all extra fields by default
+        // Hide and clear requirements by default
         unitPassDiv.classList.add("hidden");
         companyDiv.classList.add("hidden");
         companyPassDiv.classList.add("hidden");
+        companyInput.removeAttribute("required");
 
         if(role === "unit_admin") {
             unitPassDiv.classList.remove("hidden");
         } else if(role === "admin" || role === "manager" || role === "user") {
             companyDiv.classList.remove("hidden");
             companyPassDiv.classList.remove("hidden");
+            companyInput.setAttribute("required", "required");
         }
     }
 
-    // Function to filter company list based on selected unit
-    function filterCompanies() {
-        const selectedUnit = unitSelect.value;
-
-        // Reset company dropdown
-        companySelect.value = "";
-
-        companyOptions.forEach(option => {
-            if (!selectedUnit) {
-                option.style.display = "none";
-            } else if (option.getAttribute("data-unit") === selectedUnit) {
-                option.style.display = "block";
-            } else {
-                option.style.display = "none";
-            }
-        });
-    }
-
-    // Listeners
     roleSelect.addEventListener("change", toggleSections);
-    unitSelect.addEventListener("change", filterCompanies);
-
-    // Run once on load in case of browser back-button/refresh
-    toggleSections();
-    filterCompanies();
+    toggleSections(); // Handle browser back-button caching safely
 </script>
 
 </body>

@@ -14,13 +14,17 @@
         input[readonly], .locked-field { background:#2a2a2a!important; color:#9e9e9e; }
         button { background:#6200ee; color:#fff; border:none; padding:10px; border-radius:6px; cursor:pointer; font-weight:bold; }
         .btn-back { background:#333; color:#fff; text-decoration:none; padding:8px 14px; border-radius:6px; font-size:0.85rem; }
-        
-        /* Table Adjustments */
         table { width:100%; border-collapse:collapse; font-size:0.8rem; table-layout: fixed; }
-        .col-purpose { width: 150px; white-space: normal; line-height: 1.4; word-wrap: break-word; }
-        .col-date { width: 90px; }
-        .col-driver { width: 120px; }
-        
+        .col-date { width: 9%; }
+        .col-loc { width: 11%; }
+        .col-purpose { width: 14%; white-space: normal; line-height: 1.4; word-wrap: break-word; }
+        .col-time { width: 6%; }
+        .col-stat { width: 7%; }
+        .col-meter { width: 7%; }
+        .col-fuel { width: 6%; }
+        .col-poso { width: 7%; }
+        .col-driver { width: 11%; }
+        .col-admin { width: 6%; }
         .row-top-up { color: #ff5252 !important; }
         .row-transit { background: rgba(251, 192, 45, 0.1) !important; color: #fbc02d !important; }
         .table-wrapper { overflow-x:auto; max-height:420px; }
@@ -42,7 +46,7 @@
         </div>
 
         <div class="field">
-            <label>To</label>
+            <label>Location</label>
             <input type="text" name="location" value="{{ request.form.get('location', '') }}" required>
         </div>
 
@@ -99,19 +103,19 @@
             <thead>
                 <tr>
                     <th class="col-date">Date</th>
-                    <th>To</th>
+                    <th class="col-loc">Location</th>
                     <th class="col-purpose">Purpose</th>
-                    <th>Start</th>
-                    <th>End</th>
-                    <th>Trav. Time</th>
-                    <th>Stat. Run</th>
-                    <th>Meter</th>
-                    <th>Km/Miles</th>
-                    <th>Fuel</th>
-                    <th>Type</th>
-                    <th>PO/SO</th>
+                    <th class="col-time">Start</th>
+                    <th class="col-time">End</th>
+                    <th class="col-time">Trav. Time</th>
+                    <th class="col-stat">Stat. Run</th>
+                    <th class="col-meter">Meter</th>
+                    <th class="col-meter">Km/Miles</th>
+                    <th class="col-fuel">Fuel</th>
+                    <th class="col-fuel">Type</th>
+                    <th class="col-poso">PO/SO</th>
                     <th class="col-driver">Driver</th>
-                    {% if user.role == 'admin' %}<th>Admin</th>{% endif %}
+                    {% if user.role == 'admin' %}<th class="col-admin">Admin</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -155,7 +159,6 @@ document.addEventListener("DOMContentLoaded", function() {
     const p = document.getElementById("purpose"), sr = document.getElementById("sr"), st = document.getElementById("st"), et = document.getElementById("et");
     const mr = document.getElementById("mr"), km = document.getElementById("km"), ps = document.getElementById("ps"), mv = document.getElementById("mv"), fr = document.getElementById("fr"), tf = document.getElementById("tf");
 
-    // NEW: Check for URL parameter 'purpose' from My Tasks
     const urlParams = new URLSearchParams(window.location.search);
     const purposeHint = urlParams.get('purpose');
     if (purposeHint && p) {
@@ -202,7 +205,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     if(p) {
         p.addEventListener("input", handlePurposeChange);
-        // Run on load to trigger logic for auto-selected or sticky values
         handlePurposeChange(); 
     }
 
@@ -212,7 +214,6 @@ document.addEventListener("DOMContentLoaded", function() {
     updateKM();
 });
 
-// Final Validation Script
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.querySelector('form');
     function parseHHMM(tStr) {

@@ -23,9 +23,9 @@
 
 {% if user.role == 'admin' %}
 <div id="assignTaskModal" class="modal">
-    <div class="modal-content">
+    <div class="modal-content" style="width:340px;">
         <h3 style="margin-top:0; color:#fff; border-bottom:1px solid #333; padding-bottom:10px;">Assign Task</h3>
-        <form method="POST" action="{{ url_for('assign_task', user_id=0) }}">
+        <form method="POST" action="{{ url_for('assign_task') }}" id="bulkTaskForm">
             <input type="hidden" name="user_id" id="assignUserId">
             <label>Task Type</label>
             <select name="task_type" required>
@@ -36,11 +36,16 @@
                 <option value="BOS">BOS</option>
                 <option value="TOP UP POL">TOP UP POL</option>
             </select>
-            <label>Vehicle</label>
-            <select name="vehicle_id" required>
-                <option value="" disabled selected>Select vehicle</option>
-                {% for v in vehicles %}{% if v.company_id == user.company_id %}<option value="{{ v.id }}">{{ v.license_plate }}</option>{% endif %}{% endfor %}
-            </select>
+            
+            <label>Search Vehicles (Mid / Plate)</label>
+            <div style="position:relative; margin-bottom:15px;">
+                <input type="text" id="vSearchInput" placeholder="Type vehicle number..." style="width:100%; padding:10px; background:#1e1e1e; border:1px solid #444; color:#fff; border-radius:6px; outline:none; font-size:0.9rem;">
+                <div id="vSearchResults" style="display:none; position:absolute; top:100%; left:0; width:100%; max-height:140px; overflow-y:auto; background:#1a1a1a; border:1px solid #444; border-radius:6px; z-index:2010; box-shadow:0 4px 12px rgba(0,0,0,0.5);"></div>
+            </div>
+
+            <label>Selected Vehicles</label>
+            <div id="selectedVehiclesStaging" style="display:flex; flex-wrap:wrap; gap:6px; min-height:42px; max-height:110px; overflow-y:auto; background:#141414; border:1px solid #2a2a2a; border-radius:6px; padding:8px; margin-bottom:20px;"></div>
+
             <div class="modal-actions">
                 <button type="submit" class="btn-primary">Confirm Assignment</button>
                 <button type="button" class="btn-secondary" onclick="closeAssignModal()">Cancel</button>
@@ -60,8 +65,6 @@
     .role-admin { color:#ff8a65; font-weight:600; } .role-manager { color:#ffd54f; font-weight:600; } .role-user { color:#81d4fa; }
     .btn-assign { background:#4fc3f7; color:#121212; padding:6px 12px; border-radius:6px; font-size:0.8rem; font-weight:600; border:none; cursor:pointer; transition:0.2s; }
     .btn-assign:hover { background:#29b6f6; box-shadow:0 0 10px rgba(79,195,247,0.4); }
-    
-    /* Improved Modal UI */
     .modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); justify-content:center; align-items:center; z-index:2000; backdrop-filter:blur(4px); }
     .modal-content { background:#121212; padding:25px; border-radius:12px; width:340px; border:1px solid #333; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
     .modal-content label { display:block; font-size:0.75rem; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; }
@@ -74,9 +77,71 @@
 </style>
 
 <script>
+    const masterVehicles = [
+        {% for v in vehicles %}{% if v.company_id == user.company_id %}{ id: "{{ v.id }}", plate: "{{ v.license_plate }}" },{% endif %}{% endfor %}
+    ];
+    let selectedVehicleIds = new Set();
+
     const taskM = document.getElementById("assignTaskModal");
-    function openAssignModal(id) { document.getElementById("assignUserId").value = id; taskM.style.display = "flex"; }
-    function closeAssignModal() { taskM.style.display = "none"; }
+    const sInput = document.getElementById("vSearchInput");
+    const sResults = document.getElementById("vSearchResults");
+    const stagingArea = document.getElementById("selectedVehiclesStaging");
+
+    function openAssignModal(id) { 
+        document.getElementById("assignUserId").value = id; 
+        selectedVehicleIds.clear();
+        updateStagingUI();
+        sInput.value = "";
+        taskM.style.display = "flex"; 
+    }
+    function closeAssignModal() { taskM.style.display = "none"; sResults.style.display = "none"; }
     window.onclick = (e) => { if(e.target == taskM) closeAssignModal(); }
+
+    sInput.addEventListener("input", function() {
+        const val = this.value.trim().toLowerCase();
+        if (!val) { sResults.style.display = "none"; return; }
+        
+        const matches = masterVehicles.filter(v => v.plate.toLowerCase().includes(val) && !selectedVehicleIds.has(v.id));
+        if (matches.length === 0) { sResults.style.display = "none"; return; }
+
+        sResults.innerHTML = matches.map(v => `<div class="search-item" onclick="addVehicleSelection('${v.id}', '${v.plate}')" style="padding:8px 12px; cursor:pointer; color:#fff; border-bottom:1px solid #222; font-size:0.85rem;">${v.plate}</div>`).join('');
+        sResults.style.display = "block";
+        
+        document.querySelectorAll('.search-item').forEach(el => {
+            el.addEventListener('mouseenter', () => el.style.background = '#242424');
+            el.addEventListener('mouseleave', () => el.style.background = 'transparent');
+        });
+    });
+
+    function addVehicleSelection(id, plate) {
+        selectedVehicleIds.add(id);
+        sInput.value = "";
+        sResults.style.display = "none";
+        updateStagingUI();
+    }
+
+    function removeVehicleSelection(id) {
+        selectedVehicleIds.delete(id);
+        updateStagingUI();
+    }
+
+    function updateStagingUI() {
+        if (selectedVehicleIds.size === 0) {
+            stagingArea.innerHTML = '<span style="color:#555; font-size:0.8rem; font-style:italic;">No vehicles tagged yet</span>';
+            return;
+        }
+        let html = "";
+        selectedVehicleIds.forEach(id => {
+            const v = masterVehicles.find(item => item.id === id);
+            if (v) {
+                html += `<div style="display:inline-flex; align-items:center; background:#6200ee; color:#fff; padding:4px 8px; border-radius:4px; font-size:0.8rem; gap:6px;">
+                            ${v.plate}
+                            <span onclick="removeVehicleSelection('${id}')" style="cursor:pointer; font-weight:bold; color:#ff8a80; font-size:0.9rem;">&times;</span>
+                            <input type="hidden" name="vehicle_ids" value="${id}">
+                         </div>`;
+            }
+        });
+        stagingArea.innerHTML = html;
+    }
 </script>
 {% endblock %}
