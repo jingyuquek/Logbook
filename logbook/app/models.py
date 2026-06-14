@@ -11,7 +11,7 @@ class Unit(db.Model):
     passcode_hash = db.Column(db.String(255), nullable=False)
 
     companies = db.relationship("Company", backref="companies_in_unit", lazy=True, cascade="all, delete-orphan")
-    users = db.relationship("User", backref="users_in_unit", lazy=True)
+    users = db.relationship("User", back_populates="unit", lazy=True, overlaps="users_assigned_to_unit,users_in_unit")
     
 
 class Company(db.Model):
@@ -22,9 +22,9 @@ class Company(db.Model):
 
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
 
-    users = db.relationship("User", backref="company_employees", lazy=True)
+    users = db.relationship("User", back_populates="company", lazy=True, overlaps="company_employees,users_assigned_to_company")
     stores = db.relationship("Store", backref="store_company", lazy=True, cascade="all, delete-orphan")
-    vehicle_types = db.relationship("VehicleType", backref="vt_company", lazy=True, cascade="all, delete-orphan")
+    vehicle_types = db.relationship("VehicleType", back_populates="company", lazy=True, cascade="all, delete-orphan", overlaps="vt_company,types_in_company")
 
 class User(db.Model):
     __tablename__ = "users"
@@ -38,8 +38,8 @@ class User(db.Model):
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=True)
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=True)
 
-    unit = db.relationship('Unit', backref='users_assigned_to_unit')
-    company = db.relationship('Company', backref='users_assigned_to_company')
+    unit = db.relationship('Unit', back_populates='users', foreign_keys=[unit_id])
+    company = db.relationship('Company', back_populates='users', foreign_keys=[company_id])
 
 class VehicleType(db.Model):
     __tablename__ = "vehicle_type"
@@ -47,7 +47,7 @@ class VehicleType(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
     name = db.Column(db.String(50), nullable=False)
 
-    company = db.relationship("Company", backref="types_in_company", lazy=True)
+    company = db.relationship("Company", back_populates="vehicle_types", lazy=True)
     vehicles = db.relationship("Vehicle", back_populates="vehicle_type", cascade="all, delete-orphan")
     
     # ADDED LINE: Link to the new dynamic template name rows
@@ -111,7 +111,7 @@ class Vehicle(db.Model):
     def genrun_valid(self):
         if not self.gen_runs: return False
         now_naive = datetime.now(SGT).replace(tzinfo=None)
-        threshold = now_naive - datetime.timedelta(days=14)
+        threshold = now_naive - timedelta(days=14)
         last_run = max(self.gen_runs, key=lambda gr: gr.performed_at)
         last_run_time = last_run.performed_at.replace(tzinfo=None) if last_run.performed_at.tzinfo else last_run.performed_at
         return last_run_time >= threshold
