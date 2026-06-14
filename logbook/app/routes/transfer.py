@@ -2,6 +2,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime, timedelta
 import secrets
 import logging
+from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 from app.models import db, User, Vehicle, HandoverToken, Unit, Company, VehicleType, Logbook, SGT
 from app.decorators.auth import login_required, role_required
 from app.config import Role
@@ -61,17 +63,32 @@ def transit_hub():
     HandoverToken.query.filter(HandoverToken.expires_at < get_sg_time().replace(tzinfo=None)).delete()
     db.session.commit()
     
-    # Get incoming and outgoing vehicles
-    incoming = Vehicle.query.filter_by(target_company_id=user.company_id, status='in_transit').all()
-    outgoing = Vehicle.query.filter_by(previous_company_id=user.company_id, status='in_transit').all()
+    # Get incoming and outgoing vehicles with eager loading
+    incoming = db.session.execute(
+        select(Vehicle).where(
+            Vehicle.target_company_id == user.company_id,
+            Vehicle.status == 'in_transit'
+        ).options(joinedload(Vehicle.vehicle_type), joinedload(Vehicle.store))
+    ).scalars().all()
     
-    # Pull only active, unexpired tokens for the UI view
-    active_tokens = HandoverToken.query.filter(
-        HandoverToken.company_id == user.company_id,
-        HandoverToken.expires_at > get_sg_time().replace(tzinfo=None)
-    ).all()
+    outgoing = db.session.execute(
+        select(Vehicle).where(
+            Vehicle.previous_company_id == user.company_id,
+            Vehicle.status == 'in_transit'
+        ).options(joinedload(Vehicle.vehicle_type), joinedload(Vehicle.store))
+    ).scalars().all()
     
-    vehicle_types = VehicleType.query.filter_by(company_id=user.company_id).order_by(VehicleType.name).all()
+    # Pull only active, unexpired tokens for the UI view with eager loading
+    active_tokens = db.session.execute(
+        select(HandoverToken).where(
+            HandoverToken.company_id == user.company_id,
+            HandoverToken.expires_at > get_sg_time().replace(tzinfo=None)
+        ).options(joinedload(HandoverToken.vehicle_type))
+    ).scalars().all()
+    
+    vehicle_types = db.session.execute(
+        select(VehicleType).where(VehicleType.company_id == user.company_id).order_by(VehicleType.name)
+    ).scalars().all()
     
     return render_template(
         "vehicles_in_transit.html",

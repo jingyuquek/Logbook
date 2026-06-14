@@ -1,6 +1,8 @@
 from flask import Blueprint, request, redirect, url_for, flash, session, jsonify
 import re
 from datetime import datetime
+from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 from app.models import db, User, Vehicle, Store, VehicleType, FireExtinguisher, VehicleTypeExtinguisher
 from app.decorators.auth import login_required, role_required
 from app.services import VehicleService, StoreService
@@ -132,9 +134,17 @@ def add_store():
 
 
 @assets_bp.route("/vehicle/<int:vehicle_id>/add_extinguisher", methods=["POST"])
+@login_required
 def add_extinguisher(vehicle_id):
     user = db.session.get(User, session.get("user_id"))
-    vehicle = Vehicle.query.filter_by(id=vehicle_id, company_id=user.company_id).first_or_404()
+    vehicle = db.session.execute(
+        select(Vehicle).where(Vehicle.id == vehicle_id, Vehicle.company_id == user.company_id)
+    ).scalars().first()
+    
+    if not vehicle:
+        flash("Vehicle not found.", FlashCategory.DANGER)
+        return redirect(url_for("core.dashboard"))
+        
     name = request.form.get("name", "").strip()
     expiry_str = request.form.get("expiry_date", "")
 
@@ -153,8 +163,19 @@ def add_extinguisher(vehicle_id):
 @login_required
 def delete_extinguisher(extinguisher_id):
     user = db.session.get(User, session['user_id'])
-    fe = FireExtinguisher.query.get_or_404(extinguisher_id)
-    vehicle = Vehicle.query.filter_by(id=fe.vehicle_id, company_id=user.company_id).first_or_404()
+    fe = db.session.get(FireExtinguisher, extinguisher_id)
+    
+    if not fe:
+        flash("Extinguisher not found.", FlashCategory.DANGER)
+        return redirect(url_for("core.dashboard"))
+        
+    vehicle = db.session.execute(
+        select(Vehicle).where(Vehicle.id == fe.vehicle_id, Vehicle.company_id == user.company_id)
+    ).scalars().first()
+    
+    if not vehicle:
+        flash("Vehicle not found or access denied.", FlashCategory.DANGER)
+        return redirect(url_for("core.dashboard"))
 
     try:
         db.session.delete(fe)
@@ -163,7 +184,7 @@ def delete_extinguisher(extinguisher_id):
     except Exception as e:
         db.session.rollback()
         flash("Error removing fire extinguisher.", "danger")
-        current_app.logger.error(f"Error deleting extinguisher {extinguisher_id}: {e}")
+        logger.error(f"Error deleting extinguisher {extinguisher_id}: {e}")
     return redirect(url_for("logbook.view_vehicle", license_plate=vehicle.license_plate))
 
 
@@ -290,7 +311,9 @@ def remove_vehicle():
 def remove_store():
     """Remove a store."""
     user = db.session.get(User, session["user_id"])
-    store = Store.query.filter_by(id=request.form["store_id"], company_id=user.company_id).first()
+    store = db.session.execute(
+        select(Store).where(Store.id == request.form["store_id"], Store.company_id == user.company_id)
+    ).scalars().first()
     
     if store:
         saved_type_id = store.vehicle_type_id
@@ -309,7 +332,14 @@ def remove_store():
 def edit_store(store_id):
     """Edit store name."""
     user = db.session.get(User, session["user_id"])
-    store = Store.query.filter_by(id=store_id, company_id=user.company_id).first_or_404()
+    store = db.session.execute(
+        select(Store).where(Store.id == store_id, Store.company_id == user.company_id)
+    ).scalars().first()
+    
+    if not store:
+        flash("Store not found.", FlashCategory.DANGER)
+        return redirect(url_for("core.dashboard"))
+        
     new_name = request.form.get("name", "").strip()
     
     if not new_name:
@@ -339,7 +369,10 @@ def move_vehicle_store():
     if vehicle and vehicle.company_id == user.company_id:
         try:
             vehicle.store_id = new_s_id
-            vehicle.position = Vehicle.query.filter_by(store_id=new_s_id).count()
+            # Use select instead of legacy query for counting
+            vehicle.position = db.session.execute(
+                select(Vehicle).where(Vehicle.store_id == new_s_id)
+            ).scalars().count()
             db.session.commit()
             logger.info(f"Vehicle {vehicle.license_plate} moved to store {new_s_id}")
             flash("Vehicle moved successfully.", FlashCategory.SUCCESS)

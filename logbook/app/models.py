@@ -54,6 +54,7 @@ class Unit(db.Model):
 
     companies = db.relationship("Company", back_populates="unit", lazy=True, cascade="all, delete-orphan")
     users = db.relationship("User", back_populates="unit", lazy=True, foreign_keys="User.unit_id")
+    admins = db.relationship("User", primaryjoin="and_(Unit.id == User.unit_id, User.role.in_(['UNIT_ADMIN', 'COMPANY_ADMIN']))", lazy=True)
     
 
 class Company(db.Model):
@@ -70,6 +71,7 @@ class Company(db.Model):
     vehicle_types = db.relationship("VehicleType", back_populates="company", lazy=True, cascade="all, delete-orphan")
     owned_vehicles = db.relationship("Vehicle", back_populates="company", foreign_keys="Vehicle.company_id")
     incoming_transfers = db.relationship("Vehicle", back_populates="target_company", foreign_keys="Vehicle.target_company_id")
+    admins = db.relationship("User", primaryjoin="and_(Company.id == User.company_id, User.role == 'COMPANY_ADMIN')", lazy=True)
 
 class User(db.Model):
     __tablename__ = "users"
