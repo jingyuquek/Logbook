@@ -46,7 +46,7 @@
             <a href="{{ url_for('tasks.company_tasks') }}">Company History</a>
         </div></div>
         <div class="dropdown"><span class="dropbtn">Company ▾</span><div class="dropdown-content"><a href="{{ url_for('tasks.company_list') }}">View Members</a></div></div>
-        {% if user.role == "admin" %}<div class="dropdown"><span class="dropbtn">Admin ▾</span><div class="dropdown-content"><a href="{{ url_for('admin.admin_approvals') }}">Approve Users</a></div></div>{% endif %}
+        {% if user.role == "superadmin" %}<div class="dropdown"><span class="dropbtn">Admin ▾</span><div class="dropdown-content"><a href="{{ url_for('admin.superadmin_dashboard') }}">Approve Users</a></div></div>{% endif %}
         <div class="user-info"><div class="user-name">{{ user.username }}</div><div class="user-role">{{ user.role|upper }}</div></div>
         <a href="{{ url_for('auth.logout') }}" class="dropbtn">Logout</a>
     </div>
