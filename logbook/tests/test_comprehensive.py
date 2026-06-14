@@ -40,13 +40,13 @@ def app():
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
         "WTF_CSRF_ENABLED": False,
+        "WTF_CSRF_SSL_STRICT": False,
         "SECRET_KEY": "test-secret-key",
         "SQLALCHEMY_TRACK_MODIFICATIONS": False
     })
     
-    # Disable CSRF at the extension level for testing
-    from app.extensions import csrf
-    csrf._exempt_views = set()
+    # Disable CSRF protection for testing at the app config level
+    # The WTF_CSRF_ENABLED=False config should handle this
     
     with app.app_context():
         db.create_all()
@@ -163,7 +163,7 @@ def regular_user(app):
 
 
 @pytest.fixture
-def vehicle_type(app, company_admin_user):
+def vehicle_type(company_admin_user):
     """Create a vehicle type for testing"""
     user = company_admin_user
     vtype = VehicleType(
@@ -172,11 +172,12 @@ def vehicle_type(app, company_admin_user):
     )
     db.session.add(vtype)
     db.session.commit()
+    db.session.refresh(vtype)
     return vtype
 
 
 @pytest.fixture
-def store(app, company_admin_user, vehicle_type):
+def store(company_admin_user, vehicle_type):
     """Create a store for testing"""
     user = company_admin_user
     store = Store(
@@ -187,11 +188,12 @@ def store(app, company_admin_user, vehicle_type):
     )
     db.session.add(store)
     db.session.commit()
+    db.session.refresh(store)
     return store
 
 
 @pytest.fixture
-def vehicle(app, company_admin_user, vehicle_type, store):
+def vehicle(company_admin_user, vehicle_type, store):
     """Create a vehicle for testing"""
     user = company_admin_user
     vehicle = Vehicle(
