@@ -169,7 +169,7 @@ def delete_extinguisher(extinguisher_id):
 
 @assets_bp.route("/add_type_extinguisher", methods=["POST"])
 @login_required
-@role_required("admin", "manager")
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def add_type_extinguisher():
     type_id = request.form.get("vehicle_type_id")
     name = request.form.get("name", "").strip()
@@ -178,13 +178,13 @@ def add_type_extinguisher():
         vte = VehicleTypeExtinguisher(vehicle_type_id=int(type_id), name=name)
         db.session.add(vte)
         db.session.commit()
-        flash(f"Added default requirement: '{name}'", "success")
+        flash(f"Added default requirement: '{name}'", FlashCategory.SUCCESS)
     return redirect(url_for("core.dashboard", type_id=type_id))
 
 
 @assets_bp.route("/delete_type_extinguisher/<int:ext_id>", methods=["POST"])
 @login_required
-@role_required("admin", "manager")
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def delete_type_extinguisher(ext_id):
     vte = VehicleTypeExtinguisher.query.get_or_404(ext_id)
     type_id = vte.vehicle_type_id
@@ -192,21 +192,21 @@ def delete_type_extinguisher(ext_id):
     try:
         db.session.delete(vte)
         db.session.commit()
-        flash("Default extinguisher requirement removed.", "success")
+        flash("Default extinguisher requirement removed.", FlashCategory.SUCCESS)
     except Exception as e:
         db.session.rollback()
-        flash("Error removing extinguisher requirement.", "danger")
-        current_app.logger.error(f"Error deleting type extinguisher {ext_id}: {e}")
+        flash("Error removing extinguisher requirement.", FlashCategory.ERROR)
+        logger.error(f"Error deleting type extinguisher {ext_id}: {e}")
     return redirect(url_for("core.dashboard", type_id=type_id))
 
 
 @assets_bp.route("/add_vehicle_type", methods=["POST"])
 @login_required
-@role_required("admin", "manager")
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def add_vehicle_type():
     name = request.form.get("name", "").strip()
     if not name:
-        flash("Type name cannot be empty.", "danger")
+        flash("Type name cannot be empty.", FlashCategory.DANGER)
         return redirect(url_for("core.dashboard"))
 
     user = db.session.get(User, session["user_id"])
@@ -215,17 +215,17 @@ def add_vehicle_type():
     try:
         db.session.add(new_type)
         db.session.commit()
-        flash(f"Vehicle type '{name}' created successfully.", "success")
+        flash(f"Vehicle type '{name}' created successfully.", FlashCategory.SUCCESS)
     except Exception as e:
         db.session.rollback()
-        flash("Error creating vehicle type.", "danger")
-        current_app.logger.error(f"Error adding vehicle type: {e}")
+        flash("Error creating vehicle type.", FlashCategory.ERROR)
+        logger.error(f"Error adding vehicle type: {e}")
     return redirect(url_for("core.dashboard", type_id=new_type.id))
 
 
 @assets_bp.route("/remove_vehicle_type", methods=["POST"])
 @login_required
-@role_required("admin", "manager")
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def remove_vehicle_type():
     type_id = request.form.get("vehicle_type_id", type=int)
     user = db.session.get(User, session["user_id"])
@@ -236,11 +236,11 @@ def remove_vehicle_type():
         try:
             db.session.delete(vt)
             db.session.commit()
-            flash(f"Vehicle type '{name}' and all its associated stores/vehicles have been removed.", "success")
+            flash(f"Vehicle type '{name}' and all its associated stores/vehicles have been removed.", FlashCategory.SUCCESS)
         except Exception as e:
             db.session.rollback()
-            flash("Error removing vehicle type.", "danger")
-            current_app.logger.error(f"Error removing vehicle type {type_id}: {e}")
+            flash("Error removing vehicle type.", FlashCategory.ERROR)
+            logger.error(f"Error removing vehicle type {type_id}: {e}")
 
     return redirect(url_for("core.dashboard"))
 
@@ -324,17 +324,24 @@ def edit_store(store_id):
 
 
 @assets_bp.route('/move_vehicle_store', methods=['POST'])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def move_vehicle_store():
     user = db.session.get(User, session.get('user_id'))
-    if not user or user.role not in ['admin', 'manager']:
-        return redirect(url_for('auth.login'))
-
+    
     v_id = request.form.get('vehicle_id')
     new_s_id = request.form.get('new_store_id')
     vehicle = db.session.get(Vehicle, v_id)
 
     if vehicle and vehicle.company_id == user.company_id:
-        vehicle.store_id = new_s_id
-        vehicle.position = Vehicle.query.filter_by(store_id=new_s_id).count()
-        db.session.commit()
+        try:
+            vehicle.store_id = new_s_id
+            vehicle.position = Vehicle.query.filter_by(store_id=new_s_id).count()
+            db.session.commit()
+            logger.info(f"Vehicle {vehicle.license_plate} moved to store {new_s_id}")
+            flash("Vehicle moved successfully.", FlashCategory.SUCCESS)
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error moving vehicle: {e}")
+            flash("Error moving vehicle.", FlashCategory.ERROR)
     return redirect(url_for('core.dashboard'))
