@@ -45,6 +45,7 @@ def create_app():
     from app.routes.faults import faults_bp
     from app.routes.tasks import tasks_bp
     from app.routes.transfer import transfer_bp
+    from app.routes.health import health_bp
     
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
@@ -54,7 +55,35 @@ def create_app():
     app.register_blueprint(faults_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(transfer_bp)
+    app.register_blueprint(health_bp)
+    
+    # Startup Security Validation
+    _validate_startup_security(app, logger)
     
     logger.info("Flask application created successfully")
     
     return app
+
+
+def _validate_startup_security(app, logger):
+    """
+    Validates critical security configurations at startup.
+    Prevents the app from starting if critical security requirements are not met.
+    """
+    secret_key = app.config.get('SECRET_KEY')
+    debug_mode = app.config.get('DEBUG', False)
+    
+    # Check SECRET_KEY
+    if not secret_key or secret_key == 'dev-secret-key-change-in-production':
+        error_msg = "CRITICAL SECURITY ERROR: SECRET_KEY is missing or set to default. Cannot start application."
+        logger.critical(error_msg)
+        raise RuntimeError(error_msg)
+    
+    if len(secret_key) < 32:
+        logger.warning(f"SECURITY WARNING: SECRET_KEY is only {len(secret_key)} characters long. Recommended: 32+.")
+    
+    # Warn about DEBUG mode (but don't block, as it might be intentional for dev)
+    if debug_mode:
+        logger.warning("SECURITY WARNING: DEBUG mode is enabled. Ensure this is not a production environment.")
+    
+    logger.info("Startup security validation completed.")
