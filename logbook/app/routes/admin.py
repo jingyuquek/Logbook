@@ -73,3 +73,54 @@ def approve_company_admin():
         user.is_approved = True
         db.session.commit()
     return redirect(url_for("admin.unit_admin_dashboard"))
+
+@admin_bp.route("/reset_unit_passcode", methods=["POST"])
+def reset_unit_passcode():
+    if session.get("role") != "superadmin":
+        return redirect(url_for("auth.login"))
+    
+    unit_id = request.form.get("unit_id")
+    new_passcode = request.form.get("new_passcode", "").strip()
+    unit = db.session.get(Unit, unit_id)
+    
+    if unit and new_passcode:
+        unit.passcode_hash = generate_password_hash(new_passcode)
+        db.session.commit()
+        flash("Unit passcode reset successfully.", "success")
+    
+    return redirect(url_for("admin.superadmin_dashboard"))
+
+@admin_bp.route("/remove_unit", methods=["POST"])
+def remove_unit():
+    if session.get("role") != "superadmin":
+        return redirect(url_for("auth.login"))
+    
+    unit_id = request.form.get("unit_id")
+    unit = db.session.get(Unit, unit_id)
+    
+    if unit:
+        # Check if unit has any admins assigned
+        admins = User.query.filter_by(unit_id=unit.id, role="unit_admin").all()
+        if not admins:
+            db.session.delete(unit)
+            db.session.commit()
+            flash("Unit removed successfully.", "success")
+        else:
+            flash("Cannot remove unit with assigned admins. Remove admins first.", "error")
+    
+    return redirect(url_for("admin.superadmin_dashboard"))
+
+@admin_bp.route("/deny_unit_admin", methods=["POST"])
+def deny_unit_admin():
+    if session.get("role") != "superadmin":
+        return redirect(url_for("auth.login"))
+    
+    user_id = request.form.get("user_id")
+    user = db.session.get(User, user_id)
+    
+    if user and user.role == "unit_admin" and not user.is_approved:
+        db.session.delete(user)
+        db.session.commit()
+        flash("Unit admin request denied.", "success")
+    
+    return redirect(url_for("admin.superadmin_dashboard"))
