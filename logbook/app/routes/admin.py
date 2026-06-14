@@ -10,36 +10,6 @@ logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
 
-# Aliases for backward compatibility with templates
-@admin_bp.route("/admin_approvals")
-@login_required
-def admin_approvals():
-    """Alias for company admin approvals page"""
-    return redirect(url_for("tasks.company_list"))
-
-@admin_bp.route("/approve_user", methods=["POST"])
-@login_required
-def approve_user():
-    """Alias for approving company admin"""
-    return redirect(url_for("admin.approve_company_admin"))
-
-@admin_bp.route("/decline_user", methods=["POST"])
-@login_required
-def decline_user():
-    """Alias for denying company admin"""
-    return redirect(url_for("admin.deny_unit_admin"))
-
-@admin_bp.route("/deny_company_admin", methods=["POST"])
-@login_required
-def deny_company_admin():
-    """Alias for denying company admin"""
-    return redirect(url_for("admin.approve_company_admin"))
-
-@admin_bp.route("/approve_company_admins", methods=["POST"])
-@login_required
-def approve_company_admins():
-    """Alias for approving company admin"""
-    return redirect(url_for("admin.approve_company_admin"))
 
 @admin_bp.route("/remove_company_admin", methods=["POST"])
 @login_required
@@ -58,161 +28,236 @@ def remove_company_admin():
     
     return redirect(url_for("admin.unit_admin_dashboard"))
 
+
 @admin_bp.route("/reset_company_passcode", methods=["POST"])
+@login_required
+@unit_admin_required
 def reset_company_passcode():
     """Reset company passcode - unit admin only"""
-    if session.get("role") != "unit_admin":
-        return redirect(url_for("auth.login"))
-    
     company_id = request.form.get("company_id")
     new_passcode = request.form.get("new_passcode", "").strip()
     company = db.session.get(Company, company_id)
     
     if company and new_passcode:
-        company.passcode_hash = generate_password_hash(new_passcode)
-        db.session.commit()
-        flash("Company passcode reset successfully.", "success")
+        try:
+            company.passcode_hash = generate_password_hash(new_passcode)
+            db.session.commit()
+            flash("Company passcode reset successfully.", FlashCategory.SUCCESS)
+            logger.info(f"Company passcode reset for company {company_id}")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to reset company passcode: {str(e)}", exc_info=True)
+            flash("Failed to reset company passcode.", FlashCategory.ERROR)
     
     return redirect(url_for("admin.unit_admin_dashboard"))
 
+
 @admin_bp.route("/remove_company", methods=["POST"])
+@login_required
+@unit_admin_required
 def remove_company():
     """Remove company - unit admin only"""
-    if session.get("role") != "unit_admin":
-        return redirect(url_for("auth.login"))
-    
     company_id = request.form.get("company_id")
     company = db.session.get(Company, company_id)
     
     if company:
         # Check if company has any admins assigned
-        admins = User.query.filter_by(company_id=company.id, role="admin").all()
+        admins = User.query.filter_by(company_id=company.id, role=Role.COMPANY_ADMIN).all()
         if not admins:
-            db.session.delete(company)
-            db.session.commit()
-            flash("Company removed successfully.", "success")
+            try:
+                db.session.delete(company)
+                db.session.commit()
+                flash("Company removed successfully.", FlashCategory.SUCCESS)
+                logger.info(f"Company {company.name} removed")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Failed to remove company: {str(e)}", exc_info=True)
+                flash("Failed to remove company.", FlashCategory.ERROR)
         else:
-            flash("Cannot remove company with assigned admins. Remove admins first.", "error")
+            flash("Cannot remove company with assigned admins. Remove admins first.", FlashCategory.WARNING)
     
     return redirect(url_for("admin.unit_admin_dashboard"))
 
-@admin_bp.route("/superadmin", methods=["GET", "POST"])
-def superadmin_dashboard():
-    if session.get("role") != "superadmin": return redirect(url_for("auth.login"))
 
+@admin_bp.route("/superadmin", methods=["GET", "POST"])
+@login_required
+@superadmin_required
+def superadmin_dashboard():
+    """Superadmin dashboard for managing units and unit admins"""
     if request.method == "POST" and "unit_name" in request.form:
         name = request.form.get("unit_name", "").strip()
         code = request.form.get("unit_passcode", "").strip()
         if name and code and not Unit.query.filter_by(name=name).first():
-            db.session.add(Unit(name=name, passcode_hash=generate_password_hash(code)))
-            db.session.commit()
-            flash("Unit added successfully.", "success")
+            try:
+                db.session.add(Unit(name=name, passcode_hash=generate_password_hash(code)))
+                db.session.commit()
+                flash("Unit added successfully.", FlashCategory.SUCCESS)
+                logger.info(f"Unit {name} added by superadmin")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Failed to add unit: {str(e)}", exc_info=True)
+                flash("Failed to add unit.", FlashCategory.ERROR)
         return redirect(url_for("admin.superadmin_dashboard"))
 
-    units = [{"unit": u, "admins": User.query.filter_by(unit_id=u.id, role="unit_admin", is_approved=True).all()} for u in Unit.query.all()]
-    pending = User.query.filter_by(role="unit_admin", is_approved=False).all()
+    units = [{"unit": u, "admins": User.query.filter_by(unit_id=u.id, role=Role.UNIT_ADMIN, is_approved=True).all()} for u in Unit.query.all()]
+    pending = User.query.filter_by(role=Role.UNIT_ADMIN, is_approved=False).all()
     return render_template("superadmin_dashboard.html", units=units, pending_admins=pending)
 
 
 @admin_bp.route("/approve_unit_admin", methods=["POST"])
+@login_required
+@superadmin_required
 def approve_unit_admin():
-    if session.get("role") != "superadmin": return redirect(url_for("auth.login"))
+    """Approve a pending unit admin"""
     user = db.session.get(User, request.form.get("user_id"))
     if user:
-        user.is_approved = True
-        db.session.commit()
+        try:
+            user.is_approved = True
+            db.session.commit()
+            flash("Unit admin approved successfully.", FlashCategory.SUCCESS)
+            logger.info(f"Unit admin {user.username} approved")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to approve unit admin: {str(e)}", exc_info=True)
+            flash("Failed to approve unit admin.", FlashCategory.ERROR)
     return redirect(url_for("admin.superadmin_dashboard"))
 
+
 @admin_bp.route("/remove_unit_admin", methods=["POST"])
+@login_required
+@superadmin_required
 def remove_unit_admin():
-    if session.get("role") != "superadmin": 
-        return redirect(url_for("auth.login"))
-        
+    """Remove a unit admin"""
     user_id = request.form.get("user_id")
     user = db.session.get(User, user_id)
     
-    if user and user.role == "unit_admin":
-        db.session.delete(user)
-        db.session.commit()
-        flash("Unit admin removed successfully.", "success")
+    if user and user.role == Role.UNIT_ADMIN:
+        try:
+            db.session.delete(user)
+            db.session.commit()
+            flash("Unit admin removed successfully.", FlashCategory.SUCCESS)
+            logger.info(f"Unit admin {user.username} removed")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to remove unit admin: {str(e)}", exc_info=True)
+            flash("Failed to remove unit admin.", FlashCategory.ERROR)
         
     return redirect(url_for("admin.superadmin_dashboard"))
 
 
 @admin_bp.route("/unit_admin", methods=["GET", "POST"])
+@login_required
+@unit_admin_required
 def unit_admin_dashboard():
-    if session.get("role") != "unit_admin": return redirect(url_for("auth.login"))
+    """Unit admin dashboard for managing companies and company admins"""
     current_admin = db.session.get(User, session["user_id"])
 
     if request.method == "POST" and "company_name" in request.form:
         name = request.form.get("company_name", "").strip()
         code = request.form.get("company_passcode", "").strip()
         if name and code and not Company.query.filter_by(name=name, unit_id=current_admin.unit_id).first():
-            db.session.add(Company(name=name, passcode_hash=generate_password_hash(code), unit=current_admin.unit))
-            db.session.commit()
-            flash("Company registered under your unit.", "success")
+            try:
+                db.session.add(Company(name=name, passcode_hash=generate_password_hash(code), unit=current_admin.unit))
+                db.session.commit()
+                flash("Company registered under your unit.", FlashCategory.SUCCESS)
+                logger.info(f"Company {name} registered by unit admin {current_admin.username}")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Failed to register company: {str(e)}", exc_info=True)
+                flash("Failed to register company.", FlashCategory.ERROR)
         return redirect(url_for("admin.unit_admin_dashboard"))
 
-    companies = [{"company": c, "admins": User.query.filter_by(company_id=c.id, role="admin", is_approved=True).all()} for c in Company.query.filter_by(unit_id=current_admin.unit_id).all()]
-    pending = User.query.filter_by(role="admin", is_approved=False, unit_id=current_admin.unit_id).all()
+    companies = [{"company": c, "admins": User.query.filter_by(company_id=c.id, role=Role.COMPANY_ADMIN, is_approved=True).all()} for c in Company.query.filter_by(unit_id=current_admin.unit_id).all()]
+    pending = User.query.filter_by(role=Role.COMPANY_ADMIN, is_approved=False, unit_id=current_admin.unit_id).all()
     return render_template("unit_admin_dashboard.html", companies=companies, pending_admins=pending)
 
+
 @admin_bp.route("/approve_company_admin", methods=["POST"])
+@login_required
+@unit_admin_required
 def approve_company_admin():
-    if session.get("role") != "unit_admin": return redirect(url_for("auth.login"))
+    """Approve a pending company admin"""
     user = db.session.get(User, request.form.get("admin_id"))
     if user:
-        user.is_approved = True
-        db.session.commit()
+        try:
+            user.is_approved = True
+            db.session.commit()
+            flash("Company admin approved successfully.", FlashCategory.SUCCESS)
+            logger.info(f"Company admin {user.username} approved")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to approve company admin: {str(e)}", exc_info=True)
+            flash("Failed to approve company admin.", FlashCategory.ERROR)
     return redirect(url_for("admin.unit_admin_dashboard"))
 
+
 @admin_bp.route("/reset_unit_passcode", methods=["POST"])
+@login_required
+@superadmin_required
 def reset_unit_passcode():
-    if session.get("role") != "superadmin":
-        return redirect(url_for("auth.login"))
-    
+    """Reset unit passcode - superadmin only"""
     unit_id = request.form.get("unit_id")
     new_passcode = request.form.get("new_passcode", "").strip()
     unit = db.session.get(Unit, unit_id)
     
     if unit and new_passcode:
-        unit.passcode_hash = generate_password_hash(new_passcode)
-        db.session.commit()
-        flash("Unit passcode reset successfully.", "success")
+        try:
+            unit.passcode_hash = generate_password_hash(new_passcode)
+            db.session.commit()
+            flash("Unit passcode reset successfully.", FlashCategory.SUCCESS)
+            logger.info(f"Unit passcode reset for unit {unit_id}")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to reset unit passcode: {str(e)}", exc_info=True)
+            flash("Failed to reset unit passcode.", FlashCategory.ERROR)
     
     return redirect(url_for("admin.superadmin_dashboard"))
 
+
 @admin_bp.route("/remove_unit", methods=["POST"])
+@login_required
+@superadmin_required
 def remove_unit():
-    if session.get("role") != "superadmin":
-        return redirect(url_for("auth.login"))
-    
+    """Remove a unit - superadmin only"""
     unit_id = request.form.get("unit_id")
     unit = db.session.get(Unit, unit_id)
     
     if unit:
         # Check if unit has any admins assigned
-        admins = User.query.filter_by(unit_id=unit.id, role="unit_admin").all()
+        admins = User.query.filter_by(unit_id=unit.id, role=Role.UNIT_ADMIN).all()
         if not admins:
-            db.session.delete(unit)
-            db.session.commit()
-            flash("Unit removed successfully.", "success")
+            try:
+                db.session.delete(unit)
+                db.session.commit()
+                flash("Unit removed successfully.", FlashCategory.SUCCESS)
+                logger.info(f"Unit {unit.name} removed")
+            except Exception as e:
+                db.session.rollback()
+                logger.error(f"Failed to remove unit: {str(e)}", exc_info=True)
+                flash("Failed to remove unit.", FlashCategory.ERROR)
         else:
-            flash("Cannot remove unit with assigned admins. Remove admins first.", "error")
+            flash("Cannot remove unit with assigned admins. Remove admins first.", FlashCategory.WARNING)
     
     return redirect(url_for("admin.superadmin_dashboard"))
 
+
 @admin_bp.route("/deny_unit_admin", methods=["POST"])
+@login_required
+@superadmin_required
 def deny_unit_admin():
-    if session.get("role") != "superadmin":
-        return redirect(url_for("auth.login"))
-    
+    """Deny a unit admin registration request"""
     user_id = request.form.get("user_id")
     user = db.session.get(User, user_id)
     
-    if user and user.role == "unit_admin" and not user.is_approved:
-        db.session.delete(user)
-        db.session.commit()
-        flash("Unit admin request denied.", "success")
+    if user and user.role == Role.UNIT_ADMIN and not user.is_approved:
+        try:
+            db.session.delete(user)
+            db.session.commit()
+            flash("Unit admin request denied.", FlashCategory.SUCCESS)
+            logger.info(f"Unit admin request denied for {user.username}")
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Failed to deny unit admin: {str(e)}", exc_info=True)
+            flash("Failed to deny unit admin request.", FlashCategory.ERROR)
     
     return redirect(url_for("admin.superadmin_dashboard"))

@@ -2,27 +2,29 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime
 from sqlalchemy import and_, cast, String
 from app.models import db, User, Vehicle, Task, Logbook, Company, SGT
+from app.decorators.auth import login_required, role_required
+from app.config import Role, FlashCategory
+import logging
+
+logger = logging.getLogger(__name__)
 
 tasks_bp = Blueprint("tasks", __name__)
 
 
 @tasks_bp.route("/company_list")
+@login_required
 def company_list():
     """Display company personnel list with role-based sorting and vehicle assignments"""
-    if "user_id" not in session:
-        flash("Please log in.", "warning")
-        return redirect(url_for("auth.login"))
-    
     current_user = db.session.get(User, session["user_id"])
     
     if not current_user.company_id:
-        flash("You are not assigned to a company.", "danger")
+        flash("You are not assigned to a company.", FlashCategory.DANGER)
         return redirect(url_for("core.dashboard"))
     
     company = db.session.get(Company, current_user.company_id)
     
     # Role priority for sorting: Admin → Manager → User
-    role_priority = {"admin": 1, "manager": 2, "user": 3}
+    role_priority = {Role.COMPANY_ADMIN: 1, Role.MANAGER: 2, Role.USER: 3}
     
     # Get all approved users in the company
     users = User.query.filter_by(company_id=company.id, is_approved=True).all()
@@ -32,6 +34,8 @@ def company_list():
     
     # Fetch all vehicles belonging to this company
     vehicles = Vehicle.query.filter_by(company_id=company.id).order_by(Vehicle.license_plate.asc()).all()
+    
+    logger.info(f"Company list accessed by user {current_user.username}")
     
     return render_template(
         "company_list.html",
@@ -43,24 +47,18 @@ def company_list():
 
 
 @tasks_bp.route("/assign-task", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def assign_task():
     """Assign a task to a user (admin only)"""
-    if "user_id" not in session:
-        flash("Please log in.", "warning")
-        return redirect(url_for("auth.login"))
-    
     current_user = db.session.get(User, session["user_id"])
-    
-    if current_user.role != "admin":
-        flash("Access denied.", "danger")
-        return redirect(url_for("core.dashboard"))
     
     target_user_id = request.form.get("user_id")
     task_type = request.form.get("task_type")
     vehicle_ids = request.form.getlist("vehicle_ids")
     
     if not all([target_user_id, task_type, vehicle_ids]):
-        flash("All fields and at least one vehicle are required.", "warning")
+        flash("All fields and at least one vehicle are required.", FlashCategory.WARNING)
         return redirect(url_for("tasks.company_list"))
     
     target_user = User.query.filter_by(
@@ -70,27 +68,34 @@ def assign_task():
     ).first()
     
     if not target_user:
-        flash("Invalid user.", "danger")
+        flash("Invalid user.", FlashCategory.DANGER)
         return redirect(url_for("tasks.company_list"))
     
     assigned_count = 0
-    for v_id in vehicle_ids:
-        vehicle = Vehicle.query.filter_by(id=v_id, company_id=current_user.company_id).first()
+    try:
+        for v_id in vehicle_ids:
+            vehicle = Vehicle.query.filter_by(id=v_id, company_id=current_user.company_id).first()
+            
+            if vehicle:
+                task = Task(
+                    title=task_type,
+                    assigned_to_id=target_user.id,
+                    assigned_by_id=current_user.id,
+                    vehicle_id=vehicle.id,
+                    created_at=datetime.now(SGT),
+                    is_completed=False
+                )
+                db.session.add(task)
+                assigned_count += 1
         
-        if vehicle:
-            task = Task(
-                title=task_type,
-                assigned_to_id=target_user.id,
-                assigned_by_id=current_user.id,
-                vehicle_id=vehicle.id,
-                created_at=datetime.now(SGT),
-                is_completed=False
-            )
-            db.session.add(task)
-            assigned_count += 1
+        db.session.commit()
+        logger.info(f"Task '{task_type}' assigned to {target_user.username} for {assigned_count} vehicle(s) by {current_user.username}")
+        flash(f"Task '{task_type}' assigned to {target_user.username} for {assigned_count} vehicle(s).", FlashCategory.SUCCESS)
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to assign task: {str(e)}", exc_info=True)
+        flash("Failed to assign task.", FlashCategory.ERROR)
     
-    db.session.commit()
-    flash(f"Task '{task_type}' assigned to {target_user.username} for {assigned_count} vehicle(s).", "success")
     return redirect(url_for("tasks.company_list"))
 
 
