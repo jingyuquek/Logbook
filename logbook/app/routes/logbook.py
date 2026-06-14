@@ -263,6 +263,13 @@ def logbook_entry(license_plate):
     )
 
 
+# Alias for templates that use 'logbook' instead of 'logbook.logbook_entry'
+@logbook_bp.route("/logbook_alias/<license_plate>")
+def logbook(license_plate):
+    """Alias endpoint for templates using url_for('logbook', ...)"""
+    return redirect(url_for("logbook.logbook_entry", license_plate=license_plate))
+
+
 @logbook_bp.route("/api/vehicle/<int:vehicle_id>/last_values")
 def vehicle_last_values(vehicle_id):
     """API endpoint to get last valid logbook values for a vehicle"""
