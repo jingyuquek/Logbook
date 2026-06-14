@@ -14,32 +14,9 @@ __pycache__/
 # Environment
 .env
 .env.local
-.env.*
+*.env.*
 
 # Dependencies
 .venv/
 venv/
-node_modules/
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Editors
-.vscode/
-.idea/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# Testing
-.pytest_cache/
-.mypy_cache/
 ```

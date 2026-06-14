@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
-from app.models import db, User, Unit, Company
+from app.models import db, User, Unit, Company, AuditLog
 from app.decorators.auth import login_required
 from app.config import Config, Role, FlashCategory
 import logging
@@ -8,6 +8,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint("auth", __name__)
+
+
+def get_client_info():
+    """Extract client IP and user agent from request."""
+    ip_address = request.remote_addr
+    user_agent = request.headers.get('User-Agent', '')[:255]
+    return ip_address, user_agent
 
 
 def validate_password(password: str) -> tuple[bool, str]:
@@ -103,6 +110,19 @@ def register():
             )
             db.session.add(new_user)
             db.session.commit()
+            
+            # Audit log
+            ip_address, user_agent = get_client_info()
+            AuditLog.log_action(
+                user_id=new_user.id,
+                action="CREATE",
+                model_name="User",
+                record_id=new_user.id,
+                new_values={"username": username, "role": role},
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            
             logger.info(f"User {username} registered successfully with role {role}")
 
             flash("Registration submitted! Please await administrative verification.", FlashCategory.SUCCESS)
@@ -140,7 +160,20 @@ def login():
             # Set session variables
             session["user_id"] = user.id
             session["role"] = user.role
+            session["username"] = user.username
             session.permanent = True  # Use configured session lifetime
+
+            # Audit log login
+            ip_address, user_agent = get_client_info()
+            AuditLog.log_action(
+                user_id=user.id,
+                action="LOGIN",
+                model_name="User",
+                record_id=user.id,
+                new_values={"status": "success"},
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
 
             logger.info(f"User {username} logged in successfully")
 
@@ -152,6 +185,17 @@ def login():
             else:
                 return redirect(url_for("core.dashboard"))
 
+        # Audit failed login attempt
+        ip_address, user_agent = get_client_info()
+        AuditLog.log_action(
+            user_id=None,
+            action="LOGIN",
+            model_name="User",
+            new_values={"username": username, "status": "failed"},
+            ip_address=ip_address,
+            user_agent=user_agent
+        )
+        
         flash("Invalid username or password.", FlashCategory.DANGER)
         return redirect(url_for("auth.login"))
 
@@ -162,7 +206,20 @@ def login():
 @login_required
 def logout():
     """Log out the current user and clear session."""
+    user_id = session.get('user_id')
     username = session.get('username', 'Unknown')
+    
+    # Audit log logout before clearing session
+    ip_address, user_agent = get_client_info()
+    AuditLog.log_action(
+        user_id=user_id,
+        action="LOGOUT",
+        model_name="User",
+        record_id=user_id,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+    
     session.clear()
     logger.info(f"User {username} logged out")
     flash("You have been logged out successfully.", FlashCategory.INFO)
