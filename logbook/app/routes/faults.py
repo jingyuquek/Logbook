@@ -13,7 +13,7 @@ faults_bp = Blueprint("faults", __name__)
 @login_required
 def view_faults(license_plate):
     """View all faults for a specific vehicle"""
-    user = request.current_user
+    user = db.session.get(User, session["user_id"])
     vehicle = Vehicle.query.filter_by(license_plate=license_plate, company_id=user.company_id).first()
     
     if not vehicle:
@@ -35,7 +35,7 @@ def view_faults(license_plate):
 @login_required
 def add_fault(license_plate):
     """Add a new fault report for a vehicle"""
-    user = request.current_user
+    user = db.session.get(User, session["user_id"])
     vehicle = Vehicle.query.filter_by(license_plate=license_plate, company_id=user.company_id).first()
     
     if not vehicle:
@@ -86,7 +86,7 @@ def update_shutter(vehicle_id):
     """Update the shutter number for a vehicle (admin/manager only)"""
     from app.config import Role
     
-    user = request.current_user
+    user = db.session.get(User, session["user_id"])
     
     if user.role.name not in [Role.SUPERADMIN, Role.COMPANY_ADMIN, Role.UNIT_ADMIN]:
         flash("Access denied.", "danger")

@@ -150,27 +150,27 @@ def add_extinguisher(vehicle_id):
 
 
 @assets_bp.route("/extinguisher/<int:extinguisher_id>/delete", methods=["POST"])
+@login_required
 def delete_extinguisher(extinguisher_id):
-    if 'user_id' not in session:
-        return redirect(url_for("auth.login"))
     user = db.session.get(User, session['user_id'])
     fe = FireExtinguisher.query.get_or_404(extinguisher_id)
     vehicle = Vehicle.query.filter_by(id=fe.vehicle_id, company_id=user.company_id).first_or_404()
 
-    db.session.delete(fe)
-    db.session.commit()
-    flash("Fire extinguisher removed.", "success")
+    try:
+        db.session.delete(fe)
+        db.session.commit()
+        flash("Fire extinguisher removed.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash("Error removing fire extinguisher.", "danger")
+        current_app.logger.error(f"Error deleting extinguisher {extinguisher_id}: {e}")
     return redirect(url_for("logbook.view_vehicle", license_plate=vehicle.license_plate))
 
 
 @assets_bp.route("/add_type_extinguisher", methods=["POST"])
+@login_required
+@role_required("admin", "manager")
 def add_type_extinguisher():
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        return redirect(url_for("core.dashboard"))
-
     type_id = request.form.get("vehicle_type_id")
     name = request.form.get("name", "").strip()
 
@@ -183,59 +183,64 @@ def add_type_extinguisher():
 
 
 @assets_bp.route("/delete_type_extinguisher/<int:ext_id>", methods=["POST"])
+@login_required
+@role_required("admin", "manager")
 def delete_type_extinguisher(ext_id):
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        return redirect(url_for("core.dashboard"))
-
     vte = VehicleTypeExtinguisher.query.get_or_404(ext_id)
     type_id = vte.vehicle_type_id
-    db.session.delete(vte)
-    db.session.commit()
-    flash("Default extinguisher requirement removed.", "success")
+    
+    try:
+        db.session.delete(vte)
+        db.session.commit()
+        flash("Default extinguisher requirement removed.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash("Error removing extinguisher requirement.", "danger")
+        current_app.logger.error(f"Error deleting type extinguisher {ext_id}: {e}")
     return redirect(url_for("core.dashboard", type_id=type_id))
 
 
 @assets_bp.route("/add_vehicle_type", methods=["POST"])
+@login_required
+@role_required("admin", "manager")
 def add_vehicle_type():
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        flash("Access denied.", "danger")
-        return redirect(url_for("core.dashboard"))
-
     name = request.form.get("name", "").strip()
     if not name:
         flash("Type name cannot be empty.", "danger")
         return redirect(url_for("core.dashboard"))
 
+    user = db.session.get(User, session["user_id"])
     new_type = VehicleType(name=name, company_id=user.company_id)
-    db.session.add(new_type)
-    db.session.commit()
-
-    flash(f"Vehicle type '{name}' created successfully.", "success")
+    
+    try:
+        db.session.add(new_type)
+        db.session.commit()
+        flash(f"Vehicle type '{name}' created successfully.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash("Error creating vehicle type.", "danger")
+        current_app.logger.error(f"Error adding vehicle type: {e}")
     return redirect(url_for("core.dashboard", type_id=new_type.id))
 
 
 @assets_bp.route("/remove_vehicle_type", methods=["POST"])
+@login_required
+@role_required("admin", "manager")
 def remove_vehicle_type():
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        return redirect(url_for("core.dashboard"))
-
     type_id = request.form.get("vehicle_type_id", type=int)
+    user = db.session.get(User, session["user_id"])
     vt = VehicleType.query.filter_by(id=type_id, company_id=user.company_id).first()
 
     if vt:
         name = vt.name
-        db.session.delete(vt)
-        db.session.commit()
-        flash(f"Vehicle type '{name}' and all its associated stores/vehicles have been removed.", "success")
+        try:
+            db.session.delete(vt)
+            db.session.commit()
+            flash(f"Vehicle type '{name}' and all its associated stores/vehicles have been removed.", "success")
+        except Exception as e:
+            db.session.rollback()
+            flash("Error removing vehicle type.", "danger")
+            current_app.logger.error(f"Error removing vehicle type {type_id}: {e}")
 
     return redirect(url_for("core.dashboard"))
 

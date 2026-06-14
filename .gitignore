@@ -6,8 +6,17 @@ __pycache__/
 *.pyd
 
 # Database
-instance/
+*.db
 
 # Logs
 *.log
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Dependencies
+.venv/
+venv/
 ```
