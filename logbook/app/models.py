@@ -10,8 +10,8 @@ class Unit(db.Model):
     name = db.Column(db.String(100), unique=True, nullable=False)
     passcode_hash = db.Column(db.String(255), nullable=False)
 
-    companies = db.relationship("Company", backref="companies_in_unit", lazy=True, cascade="all, delete-orphan")
-    users = db.relationship("User", back_populates="unit", lazy=True, overlaps="users_assigned_to_unit,users_in_unit")
+    companies = db.relationship("Company", back_populates="unit", lazy=True, cascade="all, delete-orphan")
+    users = db.relationship("User", back_populates="unit", lazy=True, foreign_keys="User.unit_id")
     
 
 class Company(db.Model):
@@ -22,9 +22,12 @@ class Company(db.Model):
 
     unit_id = db.Column(db.Integer, db.ForeignKey("unit.id"), nullable=False)
 
-    users = db.relationship("User", back_populates="company", lazy=True, overlaps="company_employees,users_assigned_to_company")
-    stores = db.relationship("Store", backref="store_company", lazy=True, cascade="all, delete-orphan")
-    vehicle_types = db.relationship("VehicleType", back_populates="company", lazy=True, cascade="all, delete-orphan", overlaps="vt_company,types_in_company")
+    unit = db.relationship("Unit", back_populates="companies")
+    users = db.relationship("User", back_populates="company", lazy=True, foreign_keys="User.company_id")
+    stores = db.relationship("Store", back_populates="company", lazy=True, cascade="all, delete-orphan")
+    vehicle_types = db.relationship("VehicleType", back_populates="company", lazy=True, cascade="all, delete-orphan")
+    owned_vehicles = db.relationship("Vehicle", back_populates="company", foreign_keys="Vehicle.company_id")
+    incoming_transfers = db.relationship("Vehicle", back_populates="target_company", foreign_keys="Vehicle.target_company_id")
 
 class User(db.Model):
     __tablename__ = "users"
@@ -40,6 +43,10 @@ class User(db.Model):
 
     unit = db.relationship('Unit', back_populates='users', foreign_keys=[unit_id])
     company = db.relationship('Company', back_populates='users', foreign_keys=[company_id])
+    
+    # Task relationships
+    tasks_assigned = db.relationship("Task", back_populates="assigned_to", foreign_keys="Task.assigned_to_id")
+    tasks_created = db.relationship("Task", back_populates="assigned_by", foreign_keys="Task.assigned_by_id")
 
 class VehicleType(db.Model):
     __tablename__ = "vehicle_type"
@@ -47,11 +54,11 @@ class VehicleType(db.Model):
     company_id = db.Column(db.Integer, db.ForeignKey("company.id"), nullable=False)
     name = db.Column(db.String(50), nullable=False)
 
-    company = db.relationship("Company", back_populates="vehicle_types", lazy=True)
+    company = db.relationship("Company", back_populates="vehicle_types")
     vehicles = db.relationship("Vehicle", back_populates="vehicle_type", cascade="all, delete-orphan")
     
-    # ADDED LINE: Link to the new dynamic template name rows
-    default_extinguishers = db.relationship("VehicleTypeExtinguisher", backref="vehicle_type", cascade="all, delete-orphan")
+    # Link to the dynamic template extinguisher rows
+    default_extinguishers = db.relationship("VehicleTypeExtinguisher", back_populates="vehicle_type", cascade="all, delete-orphan")
 
 
 class FireExtinguisher(db.Model):
@@ -74,6 +81,8 @@ class VehicleTypeExtinguisher(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     vehicle_type_id = db.Column(db.Integer, db.ForeignKey("vehicle_type.id"), nullable=False)
     name = db.Column(db.String(50), nullable=False)
+
+    vehicle_type = db.relationship("VehicleType", back_populates="default_extinguishers")
 
 
 class Vehicle(db.Model):
@@ -98,8 +107,8 @@ class Vehicle(db.Model):
     store = db.relationship("Store", back_populates="vehicles", foreign_keys=[store_id])
     previous_store = db.relationship("Store", foreign_keys=[previous_store_id])
     
-    company = db.relationship('Company', foreign_keys=[company_id], backref='owned_vehicles')
-    target_company = db.relationship('Company', foreign_keys=[target_company_id], backref='incoming_transfers')
+    company = db.relationship('Company', foreign_keys=[company_id], back_populates='owned_vehicles')
+    target_company = db.relationship('Company', foreign_keys=[target_company_id], back_populates='incoming_transfers')
     previous_company = db.relationship('Company', foreign_keys=[previous_company_id])
 
     vehicle_type = db.relationship("VehicleType", back_populates="vehicles")
@@ -125,6 +134,7 @@ class Store(db.Model):
     vehicle_type_id = db.Column(db.Integer, db.ForeignKey("vehicle_type.id"), nullable=False)
     position = db.Column(db.Integer, default=0)
 
+    company = db.relationship("Company", back_populates="stores")
     vehicles = db.relationship("Vehicle", back_populates="store", cascade="all, delete-orphan", foreign_keys="[Vehicle.store_id]")
 
 
@@ -152,7 +162,7 @@ class GenRun(db.Model):
     )
 
     vehicle = db.relationship("Vehicle", backref="gen_runs")
-    performed_by = db.relationship("User")
+    performed_by = db.relationship("User", foreign_keys=[performed_by_id])
 
 
 class Logbook(db.Model):
@@ -249,12 +259,13 @@ class Task(db.Model):
     assigned_to = db.relationship(
         "User",
         foreign_keys=[assigned_to_id],
-        backref="tasks"
+        back_populates="tasks_assigned"
     )
 
     assigned_by = db.relationship(
         "User",
-        foreign_keys=[assigned_by_id]
+        foreign_keys=[assigned_by_id],
+        back_populates="tasks_created"
     )
 
     vehicle = db.relationship("Vehicle")
