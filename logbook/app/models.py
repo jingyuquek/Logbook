@@ -1,9 +1,49 @@
 from datetime import date, datetime, timedelta, timezone
 import secrets
+import json
 from app.extensions import db
 from app.config import Config, Role, TaskStatus, FaultStatus, VehicleStatus
 
 SGT = timezone(timedelta(hours=8))
+
+
+class AuditLog(db.Model):
+    __tablename__ = "audit_logs"
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    action = db.Column(db.String(20), nullable=False)  # CREATE, UPDATE, DELETE, LOGIN, LOGOUT
+    model_name = db.Column(db.String(50), nullable=False)
+    record_id = db.Column(db.Integer, nullable=True)
+    old_values = db.Column(db.JSON, nullable=True)
+    new_values = db.Column(db.JSON, nullable=True)
+    ip_address = db.Column(db.String(45), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    timestamp = db.Column(db.DateTime, default=lambda: datetime.now(SGT), nullable=False)
+    
+    user = db.relationship("User", backref="audit_logs")
+    
+    @staticmethod
+    def log_action(user_id, action, model_name, record_id=None, old_values=None, new_values=None, ip_address=None, user_agent=None):
+        """Helper method to create an audit log entry."""
+        try:
+            audit_entry = AuditLog(
+                user_id=user_id,
+                action=action,
+                model_name=model_name,
+                record_id=record_id,
+                old_values=json.dumps(old_values) if old_values else None,
+                new_values=json.dumps(new_values) if new_values else None,
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            db.session.add(audit_entry)
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            # Log error but don't fail the main operation
+            from flask import current_app
+            current_app.logger.error(f"Failed to create audit log: {e}")
 
 
 class Unit(db.Model):

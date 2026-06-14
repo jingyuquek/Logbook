@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash
-from app.models import db, User, Unit, Company
+from app.models import db, User, Unit, Company, AuditLog
 from app.decorators.auth import login_required, role_required, superadmin_required, unit_admin_required
 from app.services import UserService
 from app.config import Role, FlashCategory
@@ -9,6 +9,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
+
+
+def get_client_info():
+    """Extract client IP and user agent from request."""
+    ip_address = request.remote_addr
+    user_agent = request.headers.get('User-Agent', '')[:255]
+    return ip_address, user_agent
 
 
 @admin_bp.route("/remove_company_admin", methods=["POST"])
@@ -20,11 +27,29 @@ def remove_company_admin():
     user = db.session.get(User, admin_id)
     
     if user and user.role == Role.COMPANY_ADMIN:
-        success = UserService.reject_user(user)
-        if success:
-            flash("Company admin removed successfully.", FlashCategory.SUCCESS)
-        else:
-            flash("Failed to remove company admin.", FlashCategory.ERROR)
+        try:
+            old_values = {"username": user.username, "role": user.role}
+            success = UserService.reject_user(user)
+            if success:
+                # Audit log
+                ip_address, user_agent = get_client_info()
+                AuditLog.log_action(
+                    user_id=session['user_id'],
+                    action="DELETE",
+                    model_name="User",
+                    record_id=user.id,
+                    old_values=old_values,
+                    new_values={"status": "removed"},
+                    ip_address=ip_address,
+                    user_agent=user_agent
+                )
+                flash("Company admin removed successfully.", FlashCategory.SUCCESS)
+            else:
+                flash("Failed to remove company admin.", FlashCategory.ERROR)
+        except Exception as e:
+            db.session.rollback()
+            logger.error(f"Error removing company admin: {e}")
+            flash("An error occurred while removing company admin.", FlashCategory.ERROR)
     
     return redirect(url_for("admin.unit_admin_dashboard"))
 
@@ -40,8 +65,23 @@ def reset_company_passcode():
     
     if company and new_passcode:
         try:
+            old_values = {"passcode_hash": company.passcode_hash[:10]}  # Store partial hash for audit
             company.passcode_hash = generate_password_hash(new_passcode)
             db.session.commit()
+            
+            # Audit log
+            ip_address, user_agent = get_client_info()
+            AuditLog.log_action(
+                user_id=session['user_id'],
+                action="UPDATE",
+                model_name="Company",
+                record_id=company.id,
+                old_values=old_values,
+                new_values={"passcode_reset": True},
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            
             flash("Company passcode reset successfully.", FlashCategory.SUCCESS)
             logger.info(f"Company passcode reset for company {company_id}")
         except Exception as e:
@@ -65,8 +105,22 @@ def remove_company():
         admins = User.query.filter_by(company_id=company.id, role=Role.COMPANY_ADMIN).all()
         if not admins:
             try:
+                old_values = {"name": company.name, "id": company.id}
                 db.session.delete(company)
                 db.session.commit()
+                
+                # Audit log
+                ip_address, user_agent = get_client_info()
+                AuditLog.log_action(
+                    user_id=session['user_id'],
+                    action="DELETE",
+                    model_name="Company",
+                    record_id=company.id,
+                    old_values=old_values,
+                    ip_address=ip_address,
+                    user_agent=user_agent
+                )
+                
                 flash("Company removed successfully.", FlashCategory.SUCCESS)
                 logger.info(f"Company {company.name} removed")
             except Exception as e:
@@ -89,8 +143,22 @@ def superadmin_dashboard():
         code = request.form.get("unit_passcode", "").strip()
         if name and code and not Unit.query.filter_by(name=name).first():
             try:
-                db.session.add(Unit(name=name, passcode_hash=generate_password_hash(code)))
+                new_unit = Unit(name=name, passcode_hash=generate_password_hash(code))
+                db.session.add(new_unit)
                 db.session.commit()
+                
+                # Audit log
+                ip_address, user_agent = get_client_info()
+                AuditLog.log_action(
+                    user_id=session['user_id'],
+                    action="CREATE",
+                    model_name="Unit",
+                    record_id=new_unit.id,
+                    new_values={"name": name},
+                    ip_address=ip_address,
+                    user_agent=user_agent
+                )
+                
                 flash("Unit added successfully.", FlashCategory.SUCCESS)
                 logger.info(f"Unit {name} added by superadmin")
             except Exception as e:
@@ -112,8 +180,23 @@ def approve_unit_admin():
     user = db.session.get(User, request.form.get("user_id"))
     if user:
         try:
+            old_values = {"is_approved": user.is_approved}
             user.is_approved = True
             db.session.commit()
+            
+            # Audit log
+            ip_address, user_agent = get_client_info()
+            AuditLog.log_action(
+                user_id=session['user_id'],
+                action="UPDATE",
+                model_name="User",
+                record_id=user.id,
+                old_values=old_values,
+                new_values={"is_approved": True},
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            
             flash("Unit admin approved successfully.", FlashCategory.SUCCESS)
             logger.info(f"Unit admin {user.username} approved")
         except Exception as e:
@@ -133,8 +216,22 @@ def remove_unit_admin():
     
     if user and user.role == Role.UNIT_ADMIN:
         try:
+            old_values = {"username": user.username, "role": user.role}
             db.session.delete(user)
             db.session.commit()
+            
+            # Audit log
+            ip_address, user_agent = get_client_info()
+            AuditLog.log_action(
+                user_id=session['user_id'],
+                action="DELETE",
+                model_name="User",
+                record_id=user.id,
+                old_values=old_values,
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            
             flash("Unit admin removed successfully.", FlashCategory.SUCCESS)
             logger.info(f"Unit admin {user.username} removed")
         except Exception as e:
