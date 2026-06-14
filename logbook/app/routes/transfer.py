@@ -1,0 +1,185 @@
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from datetime import datetime, timedelta
+import random
+from app.models import db, User, Vehicle, HandoverToken, Unit, Company, VehicleType, Logbook, SGT
+
+transfer_bp = Blueprint("transfer", __name__)
+
+
+def get_sg_time():
+    """Get current Singapore time"""
+    return datetime.now(SGT)
+
+
+@transfer_bp.route("/vehicle/<int:vehicle_id>/initiate_handover", methods=["POST"])
+def initiate_handover(vehicle_id):
+    """Initiate a vehicle handover to another company using OTP token"""
+    if session.get('role') != 'admin':
+        return redirect(url_for("auth.login"))
+    
+    lp = request.form.get("lp")
+    otp_input = request.form.get("handover_otp", "").strip()
+    
+    # Pull the vehicle targeted for transit
+    vehicle = db.session.get(Vehicle, vehicle_id)
+    if not vehicle:
+        flash("Vehicle records could not be resolved.", "danger")
+        return redirect(url_for("core.dashboard"))
+    
+    # Query the token table for the inputted numeric sequence
+    token = HandoverToken.query.filter_by(token_string=otp_input).first()
+    
+    # Security Guard Check - verify token validity and vehicle type match
+    if (not token or 
+        get_sg_time().replace(tzinfo=None) > token.expires_at or 
+        token.vehicle_type.name != vehicle.vehicle_type.name):
+        
+        token_type = token.vehicle_type.name if token else "N/A"
+        flash(
+            f"Security Error: Mismatch. Token requires Type '{token_type}', but vehicle is Type '{vehicle.vehicle_type.name}'.",
+            "danger"
+        )
+        return redirect(url_for("logbook.view_vehicle", license_plate=lp))
+    
+    # Target destination routing is completed securely via token values
+    return redirect(url_for("logbook.logbook_entry", license_plate=lp, handover_to=token.company_id))
+
+
+@transfer_bp.route("/vehicles/transit")
+def transit_hub():
+    """Display vehicles in transit and active handover tokens"""
+    if 'user_id' not in session:
+        return redirect(url_for("auth.login"))
+    
+    user = db.session.get(User, session['user_id'])
+    
+    # Proactive Cleanup: Delete expired tokens immediately
+    HandoverToken.query.filter(HandoverToken.expires_at < get_sg_time().replace(tzinfo=None)).delete()
+    db.session.commit()
+    
+    # Get incoming and outgoing vehicles
+    incoming = Vehicle.query.filter_by(target_company_id=user.company_id, status='in_transit').all()
+    outgoing = Vehicle.query.filter_by(previous_company_id=user.company_id, status='in_transit').all()
+    
+    # Pull only active, unexpired tokens for the UI view
+    active_tokens = HandoverToken.query.filter(
+        HandoverToken.company_id == user.company_id,
+        HandoverToken.expires_at > get_sg_time().replace(tzinfo=None)
+    ).all()
+    
+    vehicle_types = VehicleType.query.filter_by(company_id=user.company_id).order_by(VehicleType.name).all()
+    
+    return render_template(
+        "vehicles_in_transit.html",
+        incoming=incoming,
+        outgoing=outgoing,
+        user=user,
+        active_tokens=active_tokens,
+        vehicle_types=vehicle_types
+    )
+
+
+@transfer_bp.route("/generate_handover_token", methods=["POST"])
+def generate_handover_token():
+    """Generate a new handover token for vehicle transfers"""
+    if "user_id" not in session or session.get("role") != "admin":
+        return redirect(url_for("auth.login"))
+    
+    user = db.session.get(User, session["user_id"])
+    if not user or not user.company_id or not user.unit_id:
+        flash("Could not resolve your structural unit details.", "danger")
+        return redirect(url_for("transfer.transit_hub"))
+    
+    vehicle_type_id = request.form.get("vehicle_type_id")
+    if not vehicle_type_id:
+        flash("Please specify a vehicle type for this token.", "danger")
+        return redirect(url_for("transfer.transit_hub"))
+    
+    try:
+        # Proactive Cleanup: Clear out stale tokens before generating new one
+        HandoverToken.query.filter(HandoverToken.expires_at < get_sg_time().replace(tzinfo=None)).delete()
+        
+        otp = HandoverToken.generate_unique_otp()
+        expiration_deadline = (get_sg_time() + timedelta(hours=12)).replace(tzinfo=None)
+        
+        token = HandoverToken(
+            token_string=otp,
+            unit_id=user.unit_id,
+            company_id=user.company_id,
+            vehicle_type_id=int(vehicle_type_id),
+            expires_at=expiration_deadline
+        )
+        
+        db.session.add(token)
+        db.session.commit()
+        flash(f"Token generated successfully: {otp} (Valid for 12 hours)", "success")
+    except Exception as e:
+        db.session.rollback()
+        print("Token Generation Error:", e)
+        flash("Failed to generate operational token.", "danger")
+    
+    return redirect(url_for("transfer.transit_hub"))
+
+
+@transfer_bp.route("/reject_handover/<int:vehicle_id>", methods=['POST'])
+def reject_handover(vehicle_id):
+    """Reject an incoming vehicle handover"""
+    if 'user_id' not in session:
+        return redirect(url_for("auth.login"))
+    
+    vehicle = db.session.get(Vehicle, vehicle_id)
+    
+    if vehicle and vehicle.status == 'in_transit':
+        # Find and remove the handover logbook entry
+        handover_entry = Logbook.query.filter(
+            Logbook.vehicle_id == vehicle.id,
+            Logbook.action_type.like('%HANDOVER TO%')
+        ).order_by(Logbook.id.desc()).first()
+        
+        if handover_entry:
+            db.session.delete(handover_entry)
+        
+        # Return vehicle to previous company
+        vehicle.company_id = vehicle.previous_company_id
+        vehicle.store_id = vehicle.previous_store_id
+        vehicle.status = 'active'
+        vehicle.target_company_id = None
+        vehicle.previous_company_id = None
+        vehicle.previous_store_id = None
+        
+        db.session.commit()
+        flash(f"Handover for {vehicle.license_plate} rejected. Logbook entry removed.", "info")
+    
+    return redirect(url_for('transfer.transit_hub'))
+
+
+@transfer_bp.route("/cancel_handover/<int:vehicle_id>", methods=['POST'])
+def cancel_handover(vehicle_id):
+    """Cancel an outgoing vehicle handover"""
+    if 'user_id' not in session:
+        return redirect(url_for("auth.login"))
+    
+    vehicle = db.session.get(Vehicle, vehicle_id)
+    
+    if vehicle and vehicle.status == 'in_transit':
+        # Find and remove the handover logbook entry
+        handover_entry = Logbook.query.filter(
+            Logbook.vehicle_id == vehicle.id,
+            Logbook.action_type.like('%HANDOVER TO%')
+        ).order_by(Logbook.id.desc()).first()
+        
+        if handover_entry:
+            db.session.delete(handover_entry)
+        
+        # Return vehicle to previous state
+        vehicle.company_id = vehicle.previous_company_id
+        vehicle.store_id = vehicle.previous_store_id
+        vehicle.status = 'active'
+        vehicle.target_company_id = None
+        vehicle.previous_company_id = None
+        vehicle.previous_store_id = None
+        
+        db.session.commit()
+        flash(f"Handover cancelled. Logbook entry for {vehicle.license_plate} removed.", "warning")
+    
+    return redirect(url_for('transfer.transit_hub'))

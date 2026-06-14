@@ -17,10 +17,18 @@ def create_app():
     from app.routes.admin import admin_bp
     from app.routes.assets import assets_bp
     from app.routes.core import core_bp
+    from app.routes.logbook import logbook_bp
+    from app.routes.faults import faults_bp
+    from app.routes.tasks import tasks_bp
+    from app.routes.transfer import transfer_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(assets_bp)
     app.register_blueprint(core_bp)
+    app.register_blueprint(logbook_bp)
+    app.register_blueprint(faults_bp)
+    app.register_blueprint(tasks_bp)
+    app.register_blueprint(transfer_bp)
 
     return app
