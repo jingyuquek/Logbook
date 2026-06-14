@@ -31,24 +31,24 @@
 </head>
 <body>
 {% if user %}<div class="header-bar">
-    <div class="header-left"><a href="{{ url_for('dashboard') }}" class="app-title-link">Vehicle Tracker</a></div>
+    <div class="header-left"><a href="{{ url_for('core.dashboard') }}" class="app-title-link">Vehicle Tracker</a></div>
     <div class="header-right">
         <div class="dropdown">
             <span class="dropbtn">Vehicles ▾ {% if has_transit %}<span class="transit-dot"></span>{% endif %}</span>
             <div class="dropdown-content">
-                <a href="{{ url_for('dashboard') }}">My Vehicles</a>
-                <a href="{{ url_for('transit_hub') }}" style="color:#fbc02d">Vehicles in Transit</a>
+                <a href="{{ url_for('core.dashboard') }}">My Vehicles</a>
+                <a href="{{ url_for('transfer.transit_hub') }}" style="color:#fbc02d">Vehicles in Transit</a>
             </div>
         </div>
         <div class="dropdown"><span class="dropbtn">Tasks ▾</span><div class="dropdown-content">
-            <a href="{{ url_for('my_tasks') }}">My Tasks</a>
-            <a href="{{ url_for('completed_tasks') }}">My History</a>
-            <a href="{{ url_for('company_tasks') }}">Company History</a>
+            <a href="{{ url_for('tasks.my_tasks') }}">My Tasks</a>
+            <a href="{{ url_for('tasks.completed_tasks') }}">My History</a>
+            <a href="{{ url_for('tasks.company_tasks') }}">Company History</a>
         </div></div>
-        <div class="dropdown"><span class="dropbtn">Company ▾</span><div class="dropdown-content"><a href="{{ url_for('company_list') }}">View Members</a></div></div>
+        <div class="dropdown"><span class="dropbtn">Company ▾</span><div class="dropdown-content"><a href="{{ url_for('tasks.company_list') }}">View Members</a></div></div>
         {% if user.role == "admin" %}<div class="dropdown"><span class="dropbtn">Admin ▾</span><div class="dropdown-content"><a href="{{ url_for('admin_approvals') }}">Approve Users</a></div></div>{% endif %}
         <div class="user-info"><div class="user-name">{{ user.username }}</div><div class="user-role">{{ user.role|upper }}</div></div>
-        <a href="{{ url_for('logout') }}" class="dropbtn">Logout</a>
+        <a href="{{ url_for('auth.logout') }}" class="dropbtn">Logout</a>
     </div>
     
 </div>{% endif %}
