@@ -80,12 +80,14 @@ def superadmin_user(app):
 @pytest.fixture
 def unit_admin_user(app):
     """Create a unit admin user for testing"""
-    unit = Unit(name="Test Unit", passcode_hash=generate_password_hash("unit123"))
+    import uuid
+    unique_id = str(uuid.uuid4())[:8]
+    unit = Unit(name=f"Test Unit {unique_id}", passcode_hash=generate_password_hash("unit123"))
     db.session.add(unit)
     db.session.commit()
     
     user = User(
-        username="unitadmin",
+        username=f"unitadmin_{unique_id}",
         password_hash=generate_password_hash("password123"),
         role="unit_admin",
         is_approved=True,
@@ -99,12 +101,14 @@ def unit_admin_user(app):
 @pytest.fixture
 def company_admin_user(app):
     """Create a company admin user for testing"""
-    unit = Unit(name="Test Unit", passcode_hash=generate_password_hash("unit123"))
+    import uuid
+    unique_id = str(uuid.uuid4())[:8]
+    unit = Unit(name=f"Test Unit {unique_id}", passcode_hash=generate_password_hash("unit123"))
     db.session.add(unit)
     db.session.commit()
     
     company = Company(
-        name="Test Company",
+        name=f"Test Company {unique_id}",
         passcode_hash=generate_password_hash("company123"),
         unit_id=unit.id
     )
@@ -112,7 +116,7 @@ def company_admin_user(app):
     db.session.commit()
     
     user = User(
-        username="admin",
+        username=f"admin_{unique_id}",
         password_hash=generate_password_hash("password123"),
         role="admin",
         is_approved=True,
@@ -127,12 +131,14 @@ def company_admin_user(app):
 @pytest.fixture
 def regular_user(app):
     """Create a regular user for testing"""
-    unit = Unit(name="Test Unit Regular", passcode_hash=generate_password_hash("unit123"))
+    import uuid
+    unique_id = str(uuid.uuid4())[:8]
+    unit = Unit(name=f"Test Unit Regular {unique_id}", passcode_hash=generate_password_hash("unit123"))
     db.session.add(unit)
     db.session.commit()
     
     company = Company(
-        name="Test Company Regular",
+        name=f"Test Company Regular {unique_id}",
         passcode_hash=generate_password_hash("company123"),
         unit_id=unit.id
     )
@@ -140,7 +146,7 @@ def regular_user(app):
     db.session.commit()
     
     user = User(
-        username="regularuser",
+        username=f"regularuser_{unique_id}",
         password_hash=generate_password_hash("password123"),
         role="user",
         is_approved=True,
@@ -270,7 +276,7 @@ class TestUserModel:
     
     def test_create_user(self, app, company_admin_user):
         """Test creating a user"""
-        assert company_admin_user.username == "admin"
+        assert company_admin_user.username.startswith("admin_")
         assert company_admin_user.role == "admin"
         assert company_admin_user.is_approved is True
     
@@ -507,7 +513,7 @@ class TestAssetRoutes:
         """Test successful vehicle addition"""
         with client.session_transaction() as sess:
             sess["user_id"] = company_admin_user.id
-            sess["role"] = "admin"
+            sess["role"] = "company_admin"
         
         response = client.post("/add_vehicle", data={
             "license_plate": "NEWPLATE",
