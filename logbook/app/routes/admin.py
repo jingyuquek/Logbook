@@ -1,5 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash
+from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 from app.models import db, User, Unit, Company, AuditLog
 from app.decorators.auth import login_required, role_required, superadmin_required, unit_admin_required
 from app.services import UserService
@@ -101,8 +103,14 @@ def remove_company():
     company = db.session.get(Company, company_id)
     
     if company:
-        # Check if company has any admins assigned
-        admins = User.query.filter_by(company_id=company.id, role=Role.COMPANY_ADMIN).all()
+        # Check if company has any admins assigned (use eager loading)
+        admins = db.session.execute(
+            select(User).where(
+                User.company_id == company.id,
+                User.role == Role.COMPANY_ADMIN
+            )
+        ).scalars().all()
+        
         if not admins:
             try:
                 old_values = {"name": company.name, "id": company.id}
@@ -167,8 +175,25 @@ def superadmin_dashboard():
                 flash("Failed to add unit.", FlashCategory.ERROR)
         return redirect(url_for("admin.superadmin_dashboard"))
 
-    units = [{"unit": u, "admins": User.query.filter_by(unit_id=u.id, role=Role.UNIT_ADMIN, is_approved=True).all()} for u in Unit.query.all()]
-    pending = User.query.filter_by(role=Role.UNIT_ADMIN, is_approved=False).all()
+    # Use eager loading for units and their admins
+    units_data = db.session.execute(
+        select(Unit).options(joinedload(Unit.admins))
+    ).scalars().all()
+    
+    # Build units list with pre-loaded admins
+    units = []
+    for u in units_data:
+        admins = [admin for admin in u.admins if admin.role == Role.UNIT_ADMIN and admin.is_approved]
+        units.append({"unit": u, "admins": admins})
+    
+    # Get pending unit admins with eager loading
+    pending = db.session.execute(
+        select(User).where(
+            User.role == Role.UNIT_ADMIN,
+            User.is_approved == False
+        ).options(joinedload(User.unit))
+    ).scalars().all()
+    
     return render_template("superadmin_dashboard.html", units=units, pending_admins=pending)
 
 
@@ -264,8 +289,26 @@ def unit_admin_dashboard():
                 flash("Failed to register company.", FlashCategory.ERROR)
         return redirect(url_for("admin.unit_admin_dashboard"))
 
-    companies = [{"company": c, "admins": User.query.filter_by(company_id=c.id, role=Role.COMPANY_ADMIN, is_approved=True).all()} for c in Company.query.filter_by(unit_id=current_admin.unit_id).all()]
-    pending = User.query.filter_by(role=Role.COMPANY_ADMIN, is_approved=False, unit_id=current_admin.unit_id).all()
+    # Use eager loading for companies and their admins
+    companies_data = db.session.execute(
+        select(Company).where(Company.unit_id == current_admin.unit_id).options(joinedload(Company.admins))
+    ).scalars().all()
+    
+    # Build companies list with pre-loaded admins
+    companies = []
+    for c in companies_data:
+        admins = [admin for admin in c.admins if admin.role == Role.COMPANY_ADMIN and admin.is_approved]
+        companies.append({"company": c, "admins": admins})
+    
+    # Get pending company admins with eager loading
+    pending = db.session.execute(
+        select(User).where(
+            User.role == Role.COMPANY_ADMIN,
+            User.is_approved == False,
+            User.unit_id == current_admin.unit_id
+        ).options(joinedload(User.company))
+    ).scalars().all()
+    
     return render_template("unit_admin_dashboard.html", companies=companies, pending_admins=pending)
 
 
@@ -320,8 +363,14 @@ def remove_unit():
     unit = db.session.get(Unit, unit_id)
     
     if unit:
-        # Check if unit has any admins assigned
-        admins = User.query.filter_by(unit_id=unit.id, role=Role.UNIT_ADMIN).all()
+        # Check if unit has any admins assigned (use eager loading)
+        admins = db.session.execute(
+            select(User).where(
+                User.unit_id == unit.id,
+                User.role == Role.UNIT_ADMIN
+            )
+        ).scalars().all()
+        
         if not admins:
             try:
                 db.session.delete(unit)
