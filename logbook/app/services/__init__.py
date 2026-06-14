@@ -122,7 +122,7 @@ class VehicleService:
         """Create a new vehicle."""
         try:
             # Check if vehicle already exists
-            existing = Vehicle.query.filter_by(license_plate=license_plate).first()
+            existing = db.session.query(Vehicle).filter_by(license_plate=license_plate).first()
             if existing:
                 return None, "Vehicle with this license plate already exists."
             
@@ -138,7 +138,7 @@ class VehicleService:
             db.session.flush()  # Get the ID before commit
             
             # Create default fire extinguishers
-            v_type = VehicleType.query.get(vehicle_type_id)
+            v_type = db.session.get(VehicleType, vehicle_type_id)
             if v_type:
                 for template in v_type.default_extinguishers:
                     db.session.add(FireExtinguisher(
@@ -159,8 +159,8 @@ class VehicleService:
     def move_vehicle(vehicle_id: int, store_id: int, company_id: int) -> Tuple[bool, str]:
         """Move a vehicle to a different store."""
         try:
-            vehicle = Vehicle.query.get(vehicle_id)
-            store = Store.query.get(store_id)
+            vehicle = db.session.get(Vehicle, vehicle_id)
+            store = db.session.get(Store, store_id)
             
             if not vehicle or not store:
                 return False, "Vehicle or store not found."
@@ -183,7 +183,7 @@ class VehicleService:
         """Reorder vehicles within a store."""
         try:
             for index, v_id in enumerate(order):
-                vehicle = Vehicle.query.get(v_id)
+                vehicle = db.session.get(Vehicle, v_id)
                 if vehicle and vehicle.company_id == company_id:
                     vehicle.position = index
                 else:
@@ -200,7 +200,7 @@ class VehicleService:
     def toggle_vor(vehicle_id: int, company_id: int) -> Tuple[Optional[Vehicle], str]:
         """Toggle vehicle VOR status."""
         try:
-            vehicle = Vehicle.query.get(vehicle_id)
+            vehicle = db.session.get(Vehicle, vehicle_id)
             if not vehicle or vehicle.company_id != company_id:
                 return None, "Access denied."
             
@@ -217,7 +217,7 @@ class VehicleService:
     def update_pol_level(vehicle_id: int, pol_level: int) -> Tuple[bool, str]:
         """Update vehicle POL level."""
         try:
-            vehicle = Vehicle.query.get(vehicle_id)
+            vehicle = db.session.get(Vehicle, vehicle_id)
             if not vehicle:
                 return False, "Vehicle not found."
             
@@ -296,7 +296,7 @@ class LogbookService:
     def delete_entry(entry_id: int) -> Tuple[bool, str]:
         """Delete a logbook entry."""
         try:
-            entry = Logbook.query.get(entry_id)
+            entry = db.session.get(Logbook, entry_id)
             if not entry:
                 return False, "Entry not found."
             
@@ -392,7 +392,7 @@ class TaskService:
     def complete_task(task_id: int) -> Tuple[bool, str]:
         """Mark a task as completed."""
         try:
-            task = Task.query.get(task_id)
+            task = db.session.get(Task, task_id)
             if not task:
                 return False, "Task not found."
             
@@ -410,7 +410,7 @@ class TaskService:
     def delete_task(task_id: int) -> Tuple[bool, str]:
         """Delete a task."""
         try:
-            task = Task.query.get(task_id)
+            task = db.session.get(Task, task_id)
             if not task:
                 return False, "Task not found."
             
@@ -467,7 +467,7 @@ class FaultService:
             from datetime import datetime
             from app.models import SGT
             
-            fault = Fault.query.get(fault_id)
+            fault = db.session.get(Fault, fault_id)
             if not fault:
                 return False, "Fault not found."
             
@@ -545,7 +545,7 @@ class TransferService:
     def cancel_handover(vehicle_id: int) -> Tuple[bool, str]:
         """Cancel a vehicle handover."""
         try:
-            vehicle = Vehicle.query.get(vehicle_id)
+            vehicle = db.session.get(Vehicle, vehicle_id)
             if not vehicle or vehicle.status != 'in_transit':
                 return False, "Vehicle not in transit."
             
