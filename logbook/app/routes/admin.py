@@ -4,6 +4,86 @@ from app.models import db, User, Unit, Company
 
 admin_bp = Blueprint("admin", __name__)
 
+# Aliases for backward compatibility with templates
+@admin_bp.route("/admin_approvals")
+def admin_approvals():
+    """Alias for company admin approvals page"""
+    return redirect(url_for("tasks.company_list"))
+
+@admin_bp.route("/approve_user", methods=["POST"])
+def approve_user():
+    """Alias for approving company admin"""
+    return redirect(url_for("admin.approve_company_admin"))
+
+@admin_bp.route("/decline_user", methods=["POST"])
+def decline_user():
+    """Alias for denying company admin"""
+    return redirect(url_for("admin.deny_unit_admin"))
+
+@admin_bp.route("/deny_company_admin", methods=["POST"])
+def deny_company_admin():
+    """Alias for denying company admin"""
+    return redirect(url_for("admin.approve_company_admin"))
+
+@admin_bp.route("/approve_company_admins", methods=["POST"])
+def approve_company_admins():
+    """Alias for approving company admin"""
+    return redirect(url_for("admin.approve_company_admin"))
+
+@admin_bp.route("/remove_company_admin", methods=["POST"])
+def remove_company_admin():
+    """Remove company admin - unit admin only"""
+    if session.get("role") != "unit_admin":
+        return redirect(url_for("auth.login"))
+    
+    admin_id = request.form.get("admin_id")
+    user = db.session.get(User, admin_id)
+    
+    if user and user.role == "admin":
+        db.session.delete(user)
+        db.session.commit()
+        flash("Company admin removed successfully.", "success")
+    
+    return redirect(url_for("admin.unit_admin_dashboard"))
+
+@admin_bp.route("/reset_company_passcode", methods=["POST"])
+def reset_company_passcode():
+    """Reset company passcode - unit admin only"""
+    if session.get("role") != "unit_admin":
+        return redirect(url_for("auth.login"))
+    
+    company_id = request.form.get("company_id")
+    new_passcode = request.form.get("new_passcode", "").strip()
+    company = db.session.get(Company, company_id)
+    
+    if company and new_passcode:
+        company.passcode_hash = generate_password_hash(new_passcode)
+        db.session.commit()
+        flash("Company passcode reset successfully.", "success")
+    
+    return redirect(url_for("admin.unit_admin_dashboard"))
+
+@admin_bp.route("/remove_company", methods=["POST"])
+def remove_company():
+    """Remove company - unit admin only"""
+    if session.get("role") != "unit_admin":
+        return redirect(url_for("auth.login"))
+    
+    company_id = request.form.get("company_id")
+    company = db.session.get(Company, company_id)
+    
+    if company:
+        # Check if company has any admins assigned
+        admins = User.query.filter_by(company_id=company.id, role="admin").all()
+        if not admins:
+            db.session.delete(company)
+            db.session.commit()
+            flash("Company removed successfully.", "success")
+        else:
+            flash("Cannot remove company with assigned admins. Remove admins first.", "error")
+    
+    return redirect(url_for("admin.unit_admin_dashboard"))
+
 @admin_bp.route("/superadmin", methods=["GET", "POST"])
 def superadmin_dashboard():
     if session.get("role") != "superadmin": return redirect(url_for("auth.login"))
