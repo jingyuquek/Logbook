@@ -1,48 +1,60 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash
 from app.models import db, User, Unit, Company
+from app.decorators.auth import login_required, role_required, superadmin_required, unit_admin_required
+from app.services import UserService
+from app.config import Role, FlashCategory
+import logging
+
+logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__)
 
 # Aliases for backward compatibility with templates
 @admin_bp.route("/admin_approvals")
+@login_required
 def admin_approvals():
     """Alias for company admin approvals page"""
     return redirect(url_for("tasks.company_list"))
 
 @admin_bp.route("/approve_user", methods=["POST"])
+@login_required
 def approve_user():
     """Alias for approving company admin"""
     return redirect(url_for("admin.approve_company_admin"))
 
 @admin_bp.route("/decline_user", methods=["POST"])
+@login_required
 def decline_user():
     """Alias for denying company admin"""
     return redirect(url_for("admin.deny_unit_admin"))
 
 @admin_bp.route("/deny_company_admin", methods=["POST"])
+@login_required
 def deny_company_admin():
     """Alias for denying company admin"""
     return redirect(url_for("admin.approve_company_admin"))
 
 @admin_bp.route("/approve_company_admins", methods=["POST"])
+@login_required
 def approve_company_admins():
     """Alias for approving company admin"""
     return redirect(url_for("admin.approve_company_admin"))
 
 @admin_bp.route("/remove_company_admin", methods=["POST"])
+@login_required
+@unit_admin_required
 def remove_company_admin():
     """Remove company admin - unit admin only"""
-    if session.get("role") != "unit_admin":
-        return redirect(url_for("auth.login"))
-    
     admin_id = request.form.get("admin_id")
     user = db.session.get(User, admin_id)
     
-    if user and user.role == "admin":
-        db.session.delete(user)
-        db.session.commit()
-        flash("Company admin removed successfully.", "success")
+    if user and user.role == Role.COMPANY_ADMIN:
+        success = UserService.reject_user(user)
+        if success:
+            flash("Company admin removed successfully.", FlashCategory.SUCCESS)
+        else:
+            flash("Failed to remove company admin.", FlashCategory.ERROR)
     
     return redirect(url_for("admin.unit_admin_dashboard"))
 
