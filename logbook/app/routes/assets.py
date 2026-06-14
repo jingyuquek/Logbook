@@ -254,7 +254,7 @@ def move_store(store_id, direction):
     else:
         flash(error, FlashCategory.WARNING)
     
-    store = Store.query.get(store_id)
+    store = db.session.get(Store, store_id)
     return redirect(url_for("core.dashboard", type_id=store.vehicle_type_id if store else None))
 
 
@@ -326,7 +326,7 @@ def move_vehicle_store():
 
     v_id = request.form.get('vehicle_id')
     new_s_id = request.form.get('new_store_id')
-    vehicle = Vehicle.query.get(v_id)
+    vehicle = db.session.get(Vehicle, v_id)
 
     if vehicle and vehicle.company_id == user.company_id:
         vehicle.store_id = new_s_id

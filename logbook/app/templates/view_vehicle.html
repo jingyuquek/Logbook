@@ -34,7 +34,7 @@
           {% if user.role in ['admin', 'manager'] %}
           <div style="display: flex; align-items: center; gap: 8px;">
               <span class="vh-label">Shutter:</span>
-              <form method="POST" action="{{ url_for('update_shutter', vehicle_id=vehicle.id) }}" class="shutter-form" style="display: flex; gap: 5px; margin: 0;">
+              <form method="POST" action="{{ url_for('faults.update_shutter', vehicle_id=vehicle.id) }}" class="shutter-form" style="display: flex; gap: 5px; margin: 0;">
                   <input type="text" name="shutter_number" value="{{ vehicle.shutter_number or '' }}" class="shutter-input" maxlength="5" style="width: 60px;" oninput="this.value = this.value.replace(/[^A-Za-z0-9]/g, '')">
                   <button type="submit" class="side-btn" style="padding:4px 8px; font-size:0.75rem;">Save</button>
               </form>

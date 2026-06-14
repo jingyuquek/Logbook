@@ -1,24 +1,45 @@
-```
-# Database files
-*.db
-
-# Logs and temp files
-*.log
-*.tmp
-
-# Environment
-.env
-.env.local
-.env.*
-
-# Editors
-.vscode/
-.idea/
-
+```gitignore
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+python/
+venv/
+.venv/
+.env
+.env.local
+.env.*
+
+# Database
+*.db
+instance/
+
+# Logs
+*.log
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Dependencies
+node_modules/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+target/
+.gradle/
+
+# OS
+.DS_Store
+Thumbs.db
 ```
