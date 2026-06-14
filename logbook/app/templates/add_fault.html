@@ -61,7 +61,7 @@ button:hover {
         <button type="submit">Save Fault</button>
     </form>
 
-    <a class="back-link" href="{{ url_for('view_faults', license_plate=vehicle.license_plate) }}">
+    <a class="back-link" href="{{ url_for('faults.view_faults', license_plate=vehicle.license_plate) }}">
         ← Back to faults
     </a>
 </div>

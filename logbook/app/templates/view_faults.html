@@ -55,7 +55,7 @@
 
     <div class="fault-header">
         <h2>Faults — {{ vehicle.license_plate }}</h2>
-        <a href="{{ url_for('add_fault', license_plate=vehicle.license_plate) }}" class="add-btn">
+        <a href="{{ url_for('faults.add_fault', license_plate=vehicle.license_plate) }}" class="add-btn">
             ➕ Add Fault
         </a>
     </div>

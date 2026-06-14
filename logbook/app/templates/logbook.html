@@ -35,7 +35,7 @@
 
 <div class="header-row">
     <h2>Vehicle Logbook: {{ vehicle.license_plate }}</h2>
-    <a href="{{ url_for('view_vehicle', license_plate=vehicle.license_plate) }}" class="btn-back">← Back to Vehicle</a>
+    <a href="{{ url_for('logbook.view_vehicle', license_plate=vehicle.license_plate) }}" class="btn-back">← Back to Vehicle</a>
 </div>
 
 <div class="card">
@@ -141,7 +141,7 @@
                     <td>{{ entry.driver_name }}</td>
                     {% if user.role == 'admin' %}
                     <td>
-                        <form action="{{ url_for('delete_logbook_entry', entry_id=entry.id) }}" method="POST" onsubmit="return confirm('Delete?');">
+                        <form action="{{ url_for('logbook.delete_logbook_entry', entry_id=entry.id) }}" method="POST" onsubmit="return confirm('Delete?');">
                             <button type="submit" class="btn-delete-small">🗑️</button>
                         </form>
                     </td>

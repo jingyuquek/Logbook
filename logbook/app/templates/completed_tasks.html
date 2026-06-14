@@ -4,7 +4,7 @@
 <div class="card">
     <div class="header-row">
         <h2>My Logbook History</h2>
-        <a href="{{ url_for('my_tasks') }}" class="btn-back">Back to My Tasks</a>
+        <a href="{{ url_for('tasks.my_tasks') }}" class="btn-back">Back to My Tasks</a>
     </div>
     <div class="table-wrapper">
         <table>
@@ -36,11 +36,11 @@
     </div>
     <div class="pagination-footer">
         {% if pagination.has_prev %}
-            <a href="{{ url_for('completed_tasks', page=pagination.prev_num) }}" class="nav-arrow">← Previous</a>
+            <a href="{{ url_for('tasks.completed_tasks', page=pagination.prev_num) }}" class="nav-arrow">← Previous</a>
         {% else %}<span class="nav-disabled">← Previous</span>{% endif %}
         <span class="page-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
         {% if pagination.has_next %}
-            <a href="{{ url_for('completed_tasks', page=pagination.next_num) }}" class="nav-arrow">Next →</a>
+            <a href="{{ url_for('tasks.completed_tasks', page=pagination.next_num) }}" class="nav-arrow">Next →</a>
         {% else %}<span class="nav-disabled">Next →</span>{% endif %}
     </div>
 </div>
