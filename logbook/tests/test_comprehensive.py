@@ -44,6 +44,10 @@ def app():
         "SQLALCHEMY_TRACK_MODIFICATIONS": False
     })
     
+    # Disable CSRF at the extension level for testing
+    from app.extensions import csrf
+    csrf._exempt_views = set()
+    
     with app.app_context():
         db.create_all()
         yield app
