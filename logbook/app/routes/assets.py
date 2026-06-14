@@ -273,8 +273,11 @@ def remove_vehicle():
     
     if vehicle and vehicle.company_id == user.company_id:
         saved_type_id = vehicle.vehicle_type_id
-        vehicle.company_id = None
+        # Instead of setting company_id to None (which violates NOT NULL constraint),
+        # we should delete the vehicle or use a soft delete flag
+        # For now, let's just clear the store_id and mark as inactive
         vehicle.store_id = None
+        vehicle.status = "inactive"
         db.session.commit()
         flash("Vehicle removed.", FlashCategory.SUCCESS)
         return redirect(url_for("core.dashboard", type_id=saved_type_id))

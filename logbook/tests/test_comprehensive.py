@@ -106,6 +106,8 @@ def unit_admin_user(app):
 def company_admin_user(app):
     """Create a company admin user for testing"""
     import uuid
+    from app.config import Role
+    
     unique_id = str(uuid.uuid4())[:8]
     unit = Unit(name=f"Test Unit {unique_id}", passcode_hash=generate_password_hash("unit123"))
     db.session.add(unit)
@@ -122,7 +124,7 @@ def company_admin_user(app):
     user = User(
         username=f"admin_{unique_id}",
         password_hash=generate_password_hash("password123"),
-        role="admin",
+        role=Role.COMPANY_ADMIN,
         is_approved=True,
         unit_id=unit.id,
         company_id=company.id
@@ -206,6 +208,7 @@ def vehicle(company_admin_user, vehicle_type, store):
     )
     db.session.add(vehicle)
     db.session.commit()
+    db.session.refresh(vehicle)
     return vehicle
 
 
@@ -282,8 +285,9 @@ class TestUserModel:
     
     def test_create_user(self, app, company_admin_user):
         """Test creating a user"""
+        from app.config import Role
         assert company_admin_user.username.startswith("admin_")
-        assert company_admin_user.role == "admin"
+        assert company_admin_user.role == Role.COMPANY_ADMIN
         assert company_admin_user.is_approved is True
     
     def test_user_relationships(self, app, company_admin_user):
@@ -528,14 +532,18 @@ class TestAssetRoutes:
         }, follow_redirects=True)
         
         assert response.status_code == 200
-        vehicle = Vehicle.query.filter_by(license_plate="NEWPLATE").first()
-        assert vehicle is not None
+        # Query within app context to ensure session is active
+        with client.application.app_context():
+            vehicle = Vehicle.query.filter_by(license_plate="NEWPLATE").first()
+            assert vehicle is not None
     
     def test_remove_vehicle(self, client, company_admin_user, vehicle):
         """Test vehicle removal"""
+        from app.config import Role
+        
         with client.session_transaction() as sess:
             sess["user_id"] = company_admin_user.id
-            sess["role"] = "admin"
+            sess["role"] = Role.COMPANY_ADMIN
         
         response = client.post("/remove_vehicle", data={
             "vehicle_id": vehicle.id
@@ -544,7 +552,10 @@ class TestAssetRoutes:
         assert response.status_code == 200
         db.session.expire_all()
         removed_vehicle = db.session.get(Vehicle, vehicle.id)
-        assert removed_vehicle.company_id is None
+        # After removal, vehicle should be marked as inactive and have store_id cleared
+        assert removed_vehicle is not None
+        assert removed_vehicle.store_id is None
+        assert removed_vehicle.status == "inactive"
     
     def test_add_store(self, client, company_admin_user, vehicle_type):
         """Test adding a store"""
