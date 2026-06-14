@@ -1,36 +1,22 @@
 ```
-# Database files
-*.db
-
-# Python cache
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Test coverage
-.coverage
-coverage/
-htmlcov/
-
-# Environment variables
-.env
-.env.local
-*.env.*
+# Database
+*.db
 
 # Logs
 *.log
 
-# Temporary files
-*.tmp
-*.swp
-*.swo
+# Environment
+.env
+.env.local
+*.env.*
 
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# IDE specific
-.vscode/
-.idea/
+# Dependencies
+.venv/
+venv/
 ```
