@@ -137,11 +137,11 @@
                         <span class="role-badge">{{ user.role }}</span>
                     </td>
                     <td class="btn-group">
-                        <form action="{{ url_for('approve_user', user_id=user.id) }}" method="POST">
+                        <form action="{{ url_for('admin.approve_user', user_id=user.id) }}" method="POST">
                             <button type="submit" class="btn-action btn-approve">Approve</button>
                         </form>
 
-                        <form action="{{ url_for('decline_user', user_id=user.id) }}" method="POST">
+                        <form action="{{ url_for('admin.decline_user', user_id=user.id) }}" method="POST">
                             <button type="submit" class="btn-action btn-reject" onclick="return confirm('Decline this request?')">Reject</button>
                         </form>
                     </td>

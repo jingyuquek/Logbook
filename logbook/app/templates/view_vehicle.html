@@ -52,7 +52,7 @@
             <span style="font-size:1.8rem; font-weight:bold;" class="{% if vehicle.pol_level > 70 %}ok{% elif vehicle.pol_level < 30 %}bad{% else %}warn{% endif %}">{{ vehicle.pol_level }}%</span>
         </div>
         <div>
-            <form method="POST" action="{{ url_for('update_pol_level', vehicle_id=vehicle.id) }}" style="display:flex; gap:6px; align-items:center; margin:0;">
+            <form method="POST" action="{{ url_for('logbook.update_pol_level', vehicle_id=vehicle.id) }}" style="display:flex; gap:6px; align-items:center; margin:0;">
                 <input type="number" name="pol_level" min="0" max="100" value="{{ vehicle.pol_level }}" style="width:70px; padding:8px; background:#2a2a2a; border:1px solid #444; color:#fff; border-radius:6px; text-align:center; font-weight:bold;" required>
                 <button type="submit" class="side-btn" style="background:#6200ee; color:#fff; padding:8px 14px; font-size:0.85rem; font-weight:bold;">Update POL</button>
             </form>
@@ -87,14 +87,14 @@
   </div>
 
   <div class="side-actions">
-    <a href="{{ url_for('logbook', license_plate=vehicle.license_plate) }}" class="side-btn">➕ Add Logbook Entry</a>
-    <a href="{{ url_for('view_faults', license_plate=vehicle.license_plate) }}" class="side-btn">🛠 View Faults</a>
+    <a href="{{ url_for('logbook.logbook', license_plate=vehicle.license_plate) }}" class="side-btn">➕ Add Logbook Entry</a>
+    <a href="{{ url_for('faults.view_faults', license_plate=vehicle.license_plate) }}" class="side-btn">🛠 View Faults</a>
     <button class="side-btn" onclick="openPfe()">🔥 Fire Extinguishers ({{ vehicle.extinguishers|length }})</button>
     
     <div class="side-row">
       <button type="button" class="side-btn half" onclick="openGenRunConfirm()">⚡ Gen Run</button>
       
-      <form method="POST" action="{{ url_for('toggle_vor', vehicle_id=vehicle.id) }}">
+      <form method="POST" action="{{ url_for('logbook.toggle_vor', vehicle_id=vehicle.id) }}">
         <button type="submit" class="side-btn half {{ 'danger' if vehicle.is_vor else '' }}">{{ '🟢 Clear VOR' if vehicle.is_vor else '🚫 Set VOR' }}</button>
       </form>
     </div>
@@ -108,7 +108,7 @@
 <div id="handoverM" class="modal"><div class="modal-content">
   <h3>Initiate Handover via Secure OTP</h3>
   <p class="muted" style="margin-bottom: 15px;">Enter the 10-digit authorization key provided securely by the receiving unit.</p>
-  <form method="POST" action="{{ url_for('initiate_handover', vehicle_id=vehicle.id) }}">
+  <form method="POST" action="{{ url_for('transfer.initiate_handover', vehicle_id=vehicle.id) }}">
     <input type="hidden" name="lp" value="{{ vehicle.license_plate }}">
     <label class="muted">Authorization Token (10 Digits)</label>
     <input type="text" name="handover_otp" maxlength="10" placeholder="e.g. 8493021847" pattern="\d{10}" style="letter-spacing: 1.5px; text-align: center; font-size: 1.2rem; font-weight: bold;" required oninput="this.value = this.value.replace(/[^0-9]/g, '')">
@@ -130,7 +130,7 @@
         <td>{{ fe.expiry_date }}</td>
         <td class="{{ 'ok' if fe.is_valid else 'bad' }}">{{ '✔ OK' if fe.is_valid else '✖ Expired' }}</td>
         <td>
-          <form method="POST" action="{{ url_for('delete_extinguisher', extinguisher_id=fe.id) }}" style="margin:0;" onsubmit="return confirm('Delete this extinguisher?');">
+          <form method="POST" action="{{ url_for('assets.delete_extinguisher', extinguisher_id=fe.id) }}" style="margin:0;" onsubmit="return confirm('Delete this extinguisher?');">
             <button type="submit" style="background:none; border:none; color:#f44336; cursor:pointer; padding:0;">🗑️</button>
           </form>
         </td>
@@ -140,7 +140,7 @@
   </table>
 
   <h4 style="margin: 0 0 10px 0; color: #9e9e9e;">➕ Add New Extinguisher</h4>
-  <form method="POST" action="{{ url_for('add_extinguisher', vehicle_id=vehicle.id) }}">
+  <form method="POST" action="{{ url_for('assets.add_extinguisher', vehicle_id=vehicle.id) }}">
     <input type="text" name="name" placeholder="Location Name (e.g. Driver Cab)" style="margin-bottom: 8px;" required>
     <input type="date" name="expiry_date" style="margin-bottom: 15px;" required>
     <div class="side-row">
@@ -156,7 +156,7 @@
     <h3 style="margin-top: 10px;">Confirm Generator Run?</h3>
     <p class="muted">This will record a new generator maintenance entry for today.</p>
     <div class="side-row" style="margin-top:20px;">
-      <form id="genRunForm" method="POST" action="{{ url_for('perform_gen_run', vehicle_id=vehicle.id) }}">
+      <form id="genRunForm" method="POST" action="{{ url_for('logbook.perform_gen_run', vehicle_id=vehicle.id) }}">
         <button type="submit" class="side-btn half" style="background:#6200ee; width: 100%;">Confirm</button>
       </form>
       <button type="button" class="side-btn half" onclick="closeGenRunConfirm()">Cancel</button>

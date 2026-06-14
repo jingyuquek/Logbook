@@ -33,7 +33,7 @@
         <h3>🔑 Handover Authorization Generator (Inbound)</h3>
         <p style="color:#bbb; font-size:0.9rem; margin: 5px 0 15px 0;">Generate a blind 10-digit OTP code to safely permit an external unit to transfer hardware directly to your company inventory maps.</p>
         
-        <form action="{{ url_for('generate_handover_token') }}" method="POST" style="display:flex; gap:12px; align-items:center;">
+        <form action="{{ url_for('transfer.generate_handover_token') }}" method="POST" style="display:flex; gap:12px; align-items:center;">
             <select name="vehicle_type_id" style="padding:10px; background:#2a2a2a; color:#fff; border:1px solid #444; border-radius:6px; min-width:250px;" required>
                 <option value="">-- Select Expected Vehicle Type --</option>
                 {% for vt in vehicle_types %}
@@ -76,9 +76,9 @@
                     <td><span class="badge">Awaiting Takeover</span></td>
                     <td>
                         <div class="action-group">
-                            <a href="{{ url_for('logbook', license_plate=v.license_plate, takeover_from=v.previous_company_id) }}" class="btn btn-ok">Process Takeover</a>
+                            <a href="{{ url_for('logbook.logbook', license_plate=v.license_plate, takeover_from=v.previous_company_id) }}" class="btn btn-ok">Process Takeover</a>
                             
-                            <form action="{{ url_for('reject_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Reject this vehicle and return it to sender?');">
+                            <form action="{{ url_for('transfer.reject_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Reject this vehicle and return it to sender?');">
                                 <button type="submit" class="btn btn-del">Reject</button>
                             </form>
                         </div>
@@ -106,7 +106,7 @@
                     </td>
                     <td><span class="badge">In Transit</span></td>
                     <td>
-                        <form action="{{ url_for('cancel_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Cancel this handover?');">
+                        <form action="{{ url_for('transfer.cancel_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Cancel this handover?');">
                             <button type="submit" class="btn btn-del">Cancel</button>
                         </form>
                     </td>

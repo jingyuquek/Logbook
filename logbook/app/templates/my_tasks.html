@@ -19,9 +19,9 @@
                     <td>
                         <div class="action-buttons">
                             {% if task.vehicle %}
-                            <a href="{{ url_for('logbook', license_plate=task.vehicle.license_plate, purpose=task.title) }}" class="btn-logbook">Logbook</a>
+                            <a href="{{ url_for('logbook.logbook', license_plate=task.vehicle.license_plate, purpose=task.title) }}" class="btn-logbook">Logbook</a>
                             {% endif %}
-                            <form method="POST" action="{{ url_for('complete_task', task_id=task.id) }}">
+                            <form method="POST" action="{{ url_for('tasks.complete_task', task_id=task.id) }}">
                                 <button type="submit" class="btn-complete">Complete</button>
                             </form>
                         </div>

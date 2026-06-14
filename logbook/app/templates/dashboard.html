@@ -55,12 +55,12 @@
 <div class="type-tabs-bar">
     {% for t in types %}
         <div style="display: inline-flex; align-items: center; background: {{ '#6200ee' if t.id == active_type_id else '#1e1e1e' }}; border: 1px solid #333; border-radius: 6px; padding-right: 6px;">
-            <a href="{{ url_for('dashboard', type_id=t.id) }}" class="tab-item {{ 'active' if t.id == active_type_id else '' }}" style="border: none; margin: 0; background: transparent;">
+            <a href="{{ url_for('core.dashboard', type_id=t.id) }}" class="tab-item {{ 'active' if t.id == active_type_id else '' }}" style="border: none; margin: 0; background: transparent;">
                 {{ t.name }}
             </a>
             {% if t.id == active_type_id and user.role in ['admin', 'manager'] %}
                 <button onclick="openModal('manageTypeModal')" style="background: none; border: none; color: #b0b0b0; font-size: 0.9rem; padding: 0 6px; cursor: pointer; margin-right: 4px;" title="Manage Extinguishers">🔧</button>
-                <form method="POST" action="{{ url_for('remove_vehicle_type') }}" onsubmit="return confirm('Delete this vehicle type? This will permanently delete all stores and vehicles inside it.');" style="display: inline; margin: 0; padding: 0;">
+                <form method="POST" action="{{ url_for('assets.remove_vehicle_type') }}" onsubmit="return confirm('Delete this vehicle type? This will permanently delete all stores and vehicles inside it.');" style="display: inline; margin: 0; padding: 0;">
                     <input type="hidden" name="vehicle_type_id" value="{{ t.id }}">
                     <button type="submit" style="background: none; border: none; color: #ff8a80; font-size: 1.1rem; padding: 0 4px; cursor: pointer; line-height: 1;">&times;</button>
                 </form>
@@ -75,7 +75,7 @@
 
 <div id="addTypeModal" class="modal"><div class="modal-content">
     <span class="close" onclick="closeModal('addTypeModal')">&times;</span><h2>Add Vehicle Type</h2>
-    <form method="POST" action="{{ url_for('add_vehicle_type') }}">
+    <form method="POST" action="{{ url_for('assets.add_vehicle_type') }}">
         <input type="text" name="name" placeholder="Type Name (e.g. Bronco)" required style="width:90%; padding:10px; margin-bottom:10px; background:#121212; color:#fff; border:1px solid #444;">
         <button type="submit" style="width:100%;">Create Type</button>
     </form>
@@ -92,7 +92,7 @@
                 {% for ext in active_type.default_extinguishers %}
                     <div class="mgmt-li" style="padding: 6px 0; border-bottom: 1px solid #2a2a2a; background: transparent; margin: 0;">
                         <span style="font-size: 0.9rem; color: #e0e0e0;">{{ ext.name }}</span>
-                        <form method="POST" action="{{ url_for('delete_type_extinguisher', ext_id=ext.id) }}" style="margin:0;">
+                        <form method="POST" action="{{ url_for('assets.delete_type_extinguisher', ext_id=ext.id) }}" style="margin:0;">
                             <button type="submit" style="background: none; color: #ff8a80; padding: 0 4px; font-size: 0.8rem; cursor: pointer;">Remove</button>
                         </form>
                     </div>
@@ -103,7 +103,7 @@
         {% endif %}
     </div>
 
-    <form method="POST" action="{{ url_for('add_type_extinguisher') }}" style="margin-top: 12px; border-top: 1px solid #333; padding-top: 12px;">
+    <form method="POST" action="{{ url_for('assets.add_type_extinguisher') }}" style="margin-top: 12px; border-top: 1px solid #333; padding-top: 12px;">
         <input type="hidden" name="vehicle_type_id" value="{{ active_type_id }}">
         <div style="display: flex; gap: 6px;">
             <input type="text" name="name" placeholder="Label (e.g. Cab, Rear)" required style="flex-grow: 1; padding: 6px 10px; background: #121212; color: #fff; border: 1px solid #444; border-radius: 4px; font-size: 0.85rem;">
@@ -114,7 +114,7 @@
 
 <div id="addStoreModal" class="modal"><div class="modal-content">
     <span class="close" onclick="closeModal('addStoreModal')">&times;</span><h2>Add Store</h2>
-    <form method="POST" action="{{ url_for('add_store') }}">
+    <form method="POST" action="{{ url_for('assets.add_store') }}">
         <input type="hidden" name="vehicle_type_id" value="{{ active_type_id }}">
         <input type="text" name="name" placeholder="Store name" required style="width:90%; padding:10px; margin-bottom:10px; background:#121212; color:#fff; border:1px solid #444;">
         <button type="submit" style="width:100%;">Create</button>
@@ -123,7 +123,7 @@
 
 <div id="addVehicleModal" class="modal"><div class="modal-content">
     <span class="close" onclick="closeModal('addVehicleModal')">&times;</span><h2>Add Vehicle</h2>
-    <form method="POST" action="{{ url_for('add_vehicle') }}">
+    <form method="POST" action="{{ url_for('assets.add_vehicle') }}">
         <input type="hidden" name="vehicle_type_id" value="{{ active_type_id }}">
         <input type="text" name="license_plate" placeholder="MID No." required style="width:90%; padding:10px; margin-bottom:10px; background:#121212; color:#fff; border:1px solid #444;">
         <select name="store_id" required style="width:97%; padding:10px; margin-bottom:10px; background:#121212; color:#fff; border:1px solid #444;">
@@ -134,7 +134,7 @@
 
 <div id="moveVehicleModal" class="modal"><div class="modal-content">
     <span class="close" onclick="closeModal('moveVehicleModal')">&times;</span><h2>Move Vehicle</h2>
-    <form method="POST" action="{{ url_for('move_vehicle_store') }}">
+    <form method="POST" action="{{ url_for('assets.move_vehicle_store') }}">
         <select name="vehicle_id" required style="width:97%; padding:10px; margin-bottom:10px; background:#121212; color:#fff; border:1px solid #444;">
             <option value="" disabled selected>Select Vehicle...</option>
             {% for store in stores %}
@@ -157,7 +157,7 @@
     <div class="store-table">
         <div style="display:flex; justify-content:space-between; align-items:center;">
             {% if user.role in ['admin', 'manager'] %}
-            <form method="POST" action="{{ url_for('edit_store', store_id=store.id) }}" style="display:inline; margin:0 0 6px 0; padding:0; flex-grow:1; margin-right:15px;">
+            <form method="POST" action="{{ url_for('assets.edit_store', store_id=store.id) }}" style="display:inline; margin:0 0 6px 0; padding:0; flex-grow:1; margin-right:15px;">
                 <input type="text" name="name" value="{{ store.name }}" required 
                        style="background:transparent; border:none; border-bottom:1px dashed #555; color:#fff; font-size:1.5rem; font-weight:bold; padding:2px 0 20px 0; width:100%; outline:none;" 
                        onchange="this.form.submit();" 
@@ -170,9 +170,9 @@
 
             {% if user.role in ['admin', 'manager'] %}
             <div style="display:flex; gap:10px; align-items:center;">
-                <a href="{{ url_for('move_store', store_id=store.id, direction='up') }}"><button style="background:none; color:#e0e0e0; font-size:1rem;">▲</button></a>
-                <a href="{{ url_for('move_store', store_id=store.id, direction='down') }}"><button style="background:none; color:#e0e0e0; font-size:1rem;">▼</button></a>
-                <form method="POST" action="{{ url_for('remove_store') }}" onsubmit="return confirm('Remove Store?')">
+                <a href="{{ url_for('assets.move_store', store_id=store.id, direction='up') }}"><button style="background:none; color:#e0e0e0; font-size:1rem;">▲</button></a>
+                <a href="{{ url_for('assets.move_store', store_id=store.id, direction='down') }}"><button style="background:none; color:#e0e0e0; font-size:1rem;">▼</button></a>
+                <form method="POST" action="{{ url_for('assets.remove_store') }}" onsubmit="return confirm('Remove Store?')">
                     <input type="hidden" name="store_id" value="{{ store.id }}">
                     <button type="submit" class="btn-delete">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -195,7 +195,7 @@
                         <div style="display: flex; align-items: center; justify-content: flex-start; gap: 3px;">
                             <span class="drag-handle" style="display: flex; align-items: center;">⠿</span>
                             <div style="display: flex; align-items: center; gap: 3px;">
-                                <a href="{{ url_for('view_vehicle', license_plate=vehicle.license_plate) }}" 
+                                <a href="{{ url_for('logbook.view_vehicle', license_plate=vehicle.license_plate) }}" 
                                 {% if vehicle.is_vor %} title = "VOR" {% endif %}
                                 class="{{ 'vor-plate' if vehicle.is_vor else 'normal-plate' }}" 
                                 style="text-decoration:none; font-weight:bold; display: flex; align-items: center;">
@@ -237,7 +237,7 @@
                     <td class="{{ 'has-faults' if vehicle.faults|length > 0 else 'no-faults' }}">{{ vehicle.faults|length }}</td>
                     <td>
                         {% if user.role in ['admin','manager'] %}
-                        <form method="POST" action="{{ url_for('remove_vehicle') }}">
+                        <form method="POST" action="{{ url_for('assets.remove_vehicle') }}">
                             <input type="hidden" name="vehicle_id" value="{{ vehicle.id }}">
                             <button type="submit" class="btn-delete">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -282,8 +282,8 @@
                 <td><span class="badge">Awaiting Takeover</span></td>
                 <td>
                     <div style="display:flex; gap:8px; justify-content:center; align-items:center;">
-                        <a href="{{ url_for('logbook', license_plate=v.license_plate, takeover_from=v.previous_company_id) }}" class="btn-ok">Accept Takeover</a>
-                        <form action="{{ url_for('reject_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Reject this vehicle and return it to sender?');">
+                        <a href="{{ url_for('logbook.logbook', license_plate=v.license_plate, takeover_from=v.previous_company_id) }}" class="btn-ok">Accept Takeover</a>
+                        <form action="{{ url_for('transfer.reject_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Reject this vehicle and return it to sender?');">
                             <button type="submit" class="btn-delete" style="padding: 6px 12px; font-size: 0.85rem;">Reject</button>
                         </form>
                     </div>
@@ -311,7 +311,7 @@
                 </td>
                 <td><span class="badge">In Transit</span></td>
                 <td>
-                    <form action="{{ url_for('cancel_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Cancel this handover?');">
+                    <form action="{{ url_for('transfer.cancel_handover', vehicle_id=v.id) }}" method="POST" onsubmit="return confirm('Cancel this handover?');">
                         <button type="submit" class="btn-delete" style="padding: 6px 12px; font-size: 0.85rem;">Cancel</button>
                     </form>
                 </td>
