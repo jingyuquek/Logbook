@@ -55,7 +55,7 @@ def initiate_handover(vehicle_id):
 @login_required
 def transit_hub():
     """Display vehicles in transit and active handover tokens"""
-    user = request.current_user
+    user = db.session.get(User, session["user_id"])
     
     # Proactive Cleanup: Delete expired tokens immediately
     HandoverToken.query.filter(HandoverToken.expires_at < get_sg_time().replace(tzinfo=None)).delete()
@@ -88,7 +88,7 @@ def transit_hub():
 @role_required(Role.COMPANY_ADMIN, Role.SUPERADMIN, Role.UNIT_ADMIN)
 def generate_handover_token():
     """Generate a new handover token for vehicle transfers"""
-    user = request.current_user
+    user = db.session.get(User, session["user_id"])
     if not user or not user.company_id or not user.unit_id:
         flash("Could not resolve your structural unit details.", "danger")
         return redirect(url_for("transfer.transit_hub"))

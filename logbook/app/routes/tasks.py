@@ -100,11 +100,9 @@ def assign_task():
 
 
 @tasks_bp.route("/my_tasks")
+@login_required
 def my_tasks():
     """Display pending tasks assigned to the current user"""
-    if "user_id" not in session:
-        flash("Please log in.", "warning")
-        return redirect(url_for("auth.login"))
     
     current_user = db.session.get(User, session["user_id"])
     
@@ -126,10 +124,9 @@ def my_tasks():
 
 
 @tasks_bp.route("/completed_tasks")
+@login_required
 def completed_tasks():
     """Display completed tasks (logbook entries) for the current user with pagination"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
     
     current_user = db.session.get(User, session["user_id"])
     page = request.args.get('page', 1, type=int)
@@ -152,10 +149,9 @@ def completed_tasks():
 
 
 @tasks_bp.route("/company_tasks")
+@login_required
 def company_tasks():
     """Display all company logbook entries with filtering and pagination (for admins)"""
-    if 'user_id' not in session:
-        return redirect(url_for('auth.login'))
     
     page = request.args.get('page', 1, type=int)
     user = db.session.get(User, session['user_id'])
@@ -197,10 +193,9 @@ def company_tasks():
 
 
 @tasks_bp.route("/complete_task/<int:task_id>", methods=["POST"])
+@login_required
 def complete_task(task_id):
     """Mark a task as completed after verifying logbook entry exists"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
     
     current_user = db.session.get(User, session["user_id"])
     task = Task.query.get_or_404(task_id)
@@ -235,20 +230,19 @@ def complete_task(task_id):
 
 
 @tasks_bp.route("/delete_task/<int:task_id>", methods=["POST"])
+@login_required
+@role_required("admin")
 def delete_task(task_id):
     """Delete a task (admin only)"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    
-    current_user = db.session.get(User, session["user_id"])
-    
-    if current_user.role != "admin":
-        flash("Unauthorized.", "danger")
-        return redirect(url_for("core.dashboard"))
     
     task = Task.query.get_or_404(task_id)
-    db.session.delete(task)
-    db.session.commit()
     
-    flash("Task removed from company history.", "success")
+    try:
+        db.session.delete(task)
+        db.session.commit()
+        flash("Task removed from company history.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash("Error deleting task.", "danger")
+        current_app.logger.error(f"Error deleting task {task_id}: {e}")
     return redirect(url_for('tasks.company_tasks'))
