@@ -1,84 +1,133 @@
-from flask import Blueprint, request, redirect, url_for, flash, session
+from flask import Blueprint, request, redirect, url_for, flash, session, jsonify
 import re
 from datetime import datetime
 from app.models import db, User, Vehicle, Store, VehicleType, FireExtinguisher, VehicleTypeExtinguisher
+from app.decorators.auth import login_required, role_required
+from app.services import VehicleService, StoreService
+from app.config import Role, FlashCategory, VehicleStatus
+import logging
+
+logger = logging.getLogger(__name__)
 
 assets_bp = Blueprint("assets", __name__)
 
 
 @assets_bp.route("/add_vehicle", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def add_vehicle():
+    """
+    Add a new vehicle to the fleet.
+    Validates license plate format and creates associated fire extinguishers.
+    """
     user = db.session.get(User, session.get("user_id"))
-    if not user or user.role not in ["admin", "manager"]:
-        return redirect(url_for("auth.login"))
-
-    plate = request.form["license_plate"].strip()
-    store_id = int(request.form["store_id"])
-    type_id = int(request.form["vehicle_type_id"])
-
-    if not re.match("^[A-Za-z0-9]+$", plate):
-        flash("Invalid License Plate characters.", "danger")
+    
+    plate = request.form.get("license_plate", "").strip()
+    store_id = request.form.get("store_id", type=int)
+    type_id = request.form.get("vehicle_type_id", type=int)
+    
+    # Validate required fields
+    if not plate or not store_id or not type_id:
+        flash("All fields are required.", FlashCategory.DANGER)
         return redirect(url_for('core.dashboard', type_id=type_id))
 
-    vehicle = Vehicle.query.filter_by(license_plate=plate).first()
-    if not vehicle:
-        vehicle = Vehicle(license_plate=plate, store_id=store_id, company_id=user.company_id, vehicle_type_id=type_id)
-        db.session.add(vehicle)
-        db.session.flush()
+    # Validate license plate format (alphanumeric only)
+    if not re.match("^[A-Za-z0-9]+$", plate):
+        flash("Invalid License Plate characters. Only alphanumeric characters allowed.", FlashCategory.DANGER)
+        return redirect(url_for('core.dashboard', type_id=type_id))
 
-        v_type = db.session.get(VehicleType, type_id)
-        if v_type:
-            for template in v_type.default_extinguishers:
-                db.session.add(FireExtinguisher(vehicle=vehicle, name=template.name, expiry_date=None))
-        db.session.commit()
-        flash("Vehicle built with tracking parameters.", "success")
+    vehicle, error = VehicleService.create_vehicle(
+        license_plate=plate,
+        store_id=store_id,
+        company_id=user.company_id,
+        vehicle_type_id=type_id
+    )
+    
+    if vehicle:
+        logger.info(f"Vehicle {plate} added by user {user.username}")
+        flash("Vehicle built with tracking parameters.", FlashCategory.SUCCESS)
+    else:
+        logger.error(f"Failed to add vehicle {plate}: {error}")
+        flash(error or "Failed to add vehicle. Please try again.", FlashCategory.ERROR)
+        
     return redirect(url_for("core.dashboard", type_id=type_id))
 
 
 @assets_bp.route("/move_vehicle", methods=["POST"])
+@login_required
 def move_vehicle():
-    if "user_id" not in session:
-        return {"error": "Unauthorized"}, 401
+    """
+    Move a vehicle to a different store.
+    JSON API endpoint for drag-and-drop functionality.
+    """
     data = request.get_json() or {}
-    vehicle = db.session.get(Vehicle, data.get("vehicle_id"))
-    store = db.session.get(Store, data.get("store_id"))
+    vehicle_id = data.get("vehicle_id")
+    store_id = data.get("store_id")
+    
+    if not vehicle_id or not store_id:
+        return jsonify({"error": "Missing vehicle_id or store_id"}), 400
+    
     user = db.session.get(User, session["user_id"])
-
-    if vehicle and store and vehicle.company_id == user.company_id and store.company_id == user.company_id:
-        vehicle.store = store
-        vehicle.vehicle_type_id = store.vehicle_type_id
-        db.session.commit()
-        return {"success": True}, 200
-    return {"error": "Permit Denied"}, 403
+    
+    success, error = VehicleService.move_vehicle(vehicle_id, store_id, user.company_id)
+    
+    if success:
+        logger.info(f"Vehicle moved to store {store_id}")
+        return jsonify({"success": True}), 200
+    else:
+        logger.warning(f"Failed to move vehicle: {error}")
+        if "Permission" in error or "not found" in error:
+            return jsonify({"error": error}), 403 if "Permission" in error else 404
+        return jsonify({"error": "Failed to move vehicle"}), 500
 
 
 @assets_bp.route("/reorder_vehicles", methods=["POST"])
+@login_required
 def reorder_vehicles():
-    if "user_id" not in session:
-        return {"status": "unauthorized"}, 401
+    """
+    Reorder vehicles within a store.
+    JSON API endpoint for position updates.
+    """
     data = request.json or {}
-    for index, v_id in enumerate(data.get("order", [])):
-        vehicle = db.session.get(Vehicle, v_id)
-        if vehicle:
-            vehicle.position = index
-    db.session.commit()
-    return {"status": "success"}, 200
+    order = data.get("order", [])
+    
+    if not order:
+        return jsonify({"status": "error", "message": "No order data provided"}), 400
+    
+    user = db.session.get(User, session["user_id"])
+    
+    success, error = VehicleService.reorder_vehicles(order, user.company_id)
+    
+    if success:
+        return jsonify({"status": "success"}), 200
+    else:
+        logger.error(f"Failed to reorder vehicles: {error}")
+        return jsonify({"status": "error", "message": error}), 500
 
 
 @assets_bp.route("/add_store", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def add_store():
+    """Add a new store for a specific vehicle type."""
     user = db.session.get(User, session.get("user_id"))
-    if not user or user.role not in ["admin", "manager"]:
-        return redirect(url_for("auth.login"))
 
     name = request.form.get("name", "").strip()
     type_id = request.form.get("vehicle_type_id", type=int)
 
-    if name and type_id:
-        pos_count = Store.query.filter_by(company_id=user.company_id, vehicle_type_id=type_id).count()
-        db.session.add(Store(name=name, company_id=user.company_id, vehicle_type_id=type_id, position=pos_count))
-        db.session.commit()
-        flash("Store created.", "success")
+    if not name or not type_id:
+        flash("Store name and vehicle type are required.", FlashCategory.DANGER)
+        return redirect(url_for("core.dashboard", type_id=type_id))
+
+    store, error = StoreService.create_store(name, user.company_id, type_id)
+    
+    if store:
+        logger.info(f"Store '{name}' created by user {user.username}")
+        flash("Store created.", FlashCategory.SUCCESS)
+    else:
+        logger.error(f"Failed to create store: {error}")
+        flash("Failed to create store.", FlashCategory.ERROR)
+        
     return redirect(url_for("core.dashboard", type_id=type_id))
 
 
@@ -192,84 +241,80 @@ def remove_vehicle_type():
 
 
 @assets_bp.route("/move_store/<int:store_id>/<direction>")
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def move_store(store_id, direction):
+    """Move store position up or down."""
     user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        return redirect(url_for("core.dashboard"))
-    store = Store.query.filter_by(id=store_id, company_id=user.company_id).first()
-    if not store:
-        return redirect(url_for("core.dashboard"))
     
-    if direction == "up":
-        swap = Store.query.filter(
-            Store.company_id == user.company_id,
-            Store.vehicle_type_id == store.vehicle_type_id,
-            Store.position < store.position
-        ).order_by(Store.position.desc()).first()
+    success, error = StoreService.move_store(store_id, direction, user.company_id)
+    
+    if success:
+        flash(f"Store moved {direction}.", FlashCategory.SUCCESS)
     else:
-        swap = Store.query.filter(
-            Store.company_id == user.company_id,
-            Store.vehicle_type_id == store.vehicle_type_id,
-            Store.position > store.position
-        ).order_by(Store.position.asc()).first()
+        flash(error, FlashCategory.WARNING)
     
-    if swap:
-        store.position, swap.position = swap.position, store.position
-        db.session.commit()
-    return redirect(url_for("core.dashboard", type_id=store.vehicle_type_id))
+    store = Store.query.get(store_id)
+    return redirect(url_for("core.dashboard", type_id=store.vehicle_type_id if store else None))
 
 
 @assets_bp.route("/remove_vehicle", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def remove_vehicle():
+    """Remove a vehicle from the fleet."""
     user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        return redirect(url_for("core.dashboard"))
     vehicle = db.session.get(Vehicle, request.form["vehicle_id"])
+    
     if vehicle and vehicle.company_id == user.company_id:
         saved_type_id = vehicle.vehicle_type_id
         vehicle.company_id = None
         vehicle.store_id = None
         db.session.commit()
-        flash("Vehicle removed.", "success")
+        flash("Vehicle removed.", FlashCategory.SUCCESS)
         return redirect(url_for("core.dashboard", type_id=saved_type_id))
     return redirect(url_for("core.dashboard"))
 
 
 @assets_bp.route("/remove_store", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def remove_store():
+    """Remove a store."""
     user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        return redirect(url_for("core.dashboard"))
     store = Store.query.filter_by(id=request.form["store_id"], company_id=user.company_id).first()
+    
     if store:
         saved_type_id = store.vehicle_type_id
-        db.session.delete(store)
-        db.session.commit()
-        flash("Store removed.", "success")
+        success, error = StoreService.delete_store(store.id, user.company_id)
+        if success:
+            flash("Store removed.", FlashCategory.SUCCESS)
+        else:
+            flash(error, FlashCategory.ERROR)
         return redirect(url_for("core.dashboard", type_id=saved_type_id))
     return redirect(url_for("core.dashboard"))
 
 
 @assets_bp.route("/edit_store/<int:store_id>", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def edit_store(store_id):
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
+    """Edit store name."""
     user = db.session.get(User, session["user_id"])
-    if user.role not in ["admin", "manager"]:
-        flash("Access denied.", "danger")
-        return redirect(url_for("core.dashboard"))
     store = Store.query.filter_by(id=store_id, company_id=user.company_id).first_or_404()
     new_name = request.form.get("name", "").strip()
+    
     if not new_name:
-        flash("Store name cannot be empty.", "danger")
+        flash("Store name cannot be empty.", FlashCategory.DANGER)
         return redirect(url_for("core.dashboard", type_id=store.vehicle_type_id))
-    existing = Store.query.filter_by(name=new_name, company_id=user.company_id, vehicle_type_id=store.vehicle_type_id).first()
-    if existing and existing.id != store.id:
-        flash("Another store with that name already exists in this layout view.", "warning")
-        return redirect(url_for("core.dashboard", type_id=store.vehicle_type_id))
-    store.name = new_name
-    db.session.commit()
-    flash("Store name updated.", "success")
+    
+    success, error = StoreService.update_store(store_id, new_name, user.company_id)
+    
+    if success:
+        flash("Store name updated.", FlashCategory.SUCCESS)
+    else:
+        flash(error, FlashCategory.WARNING)
+    
     return redirect(url_for("core.dashboard", type_id=store.vehicle_type_id))
 
 

@@ -1,5 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
-from app import db
+import secrets
+from app.extensions import db
+from app.config import Config, Role, TaskStatus, FaultStatus, VehicleStatus
 
 SGT = timezone(timedelta(hours=8))
 
@@ -118,9 +120,10 @@ class Vehicle(db.Model):
 
     @property
     def genrun_valid(self):
-        if not self.gen_runs: return False
+        if not self.gen_runs: 
+            return False
         now_naive = datetime.now(SGT).replace(tzinfo=None)
-        threshold = now_naive - timedelta(days=14)
+        threshold = now_naive - timedelta(days=Config.GENRUN_VALIDITY_DAYS)
         last_run = max(self.gen_runs, key=lambda gr: gr.performed_at)
         last_run_time = last_run.performed_at.replace(tzinfo=None) if last_run.performed_at.tzinfo else last_run.performed_at
         return last_run_time >= threshold
@@ -284,10 +287,19 @@ class HandoverToken(db.Model):
     vehicle_type = db.relationship("VehicleType", foreign_keys=[vehicle_type_id])
 
     @staticmethod
-    def generate_unique_otp():
-        import random
+    def generate_unique_otp() -> str:
+        """
+        Generate a cryptographically secure unique OTP for handover tokens.
+        
+        Returns:
+            A unique 10-character numeric token string
+            
+        Raises:
+            RuntimeError: If unable to generate a unique token after 100 attempts
+        """
         for _ in range(100):
-            otp = "".join([str(random.randint(0, 9)) for _ in range(10)])
+            # Use secrets module for cryptographically secure random generation
+            otp = ''.join([str(secrets.randbelow(10)) for _ in range(Config.HANDOVER_TOKEN_LENGTH)])
             if not HandoverToken.query.filter_by(token_string=otp).first():
                 return otp
         raise RuntimeError("Failed to generate a unique operational token.")
