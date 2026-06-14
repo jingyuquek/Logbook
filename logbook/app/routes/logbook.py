@@ -2,6 +2,11 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from datetime import datetime, timedelta
 from sqlalchemy import and_, cast, String
 from app.models import db, User, Vehicle, Logbook, GenRun, Store, Company, Unit, SGT
+from app.decorators.auth import login_required, role_required
+from app.config import Role, FlashCategory
+import logging
+
+logger = logging.getLogger(__name__)
 
 logbook_bp = Blueprint("logbook", __name__)
 
@@ -27,11 +32,9 @@ def get_last_valid_logbook_value(vehicle_id, field):
 
 
 @logbook_bp.route("/vehicle/<string:license_plate>")
+@login_required
 def view_vehicle(license_plate):
     """View vehicle details with recent logbook entries and genrun status"""
-    if 'user_id' not in session:
-        return redirect(url_for("auth.login"))
-    
     user = db.session.get(User, session['user_id'])
     vehicle = Vehicle.query.filter_by(license_plate=license_plate, company_id=user.company_id).first_or_404()
     
@@ -46,6 +49,8 @@ def view_vehicle(license_plate):
         last_run_time = last_genrun.performed_at.replace(tzinfo=None) if last_genrun.performed_at.tzinfo else last_genrun.performed_at
         genrun_valid = last_run_time >= (now_sg - timedelta(days=14))
     
+    logger.info(f"Vehicle {license_plate} viewed by user {user.username}")
+    
     return render_template(
         "view_vehicle.html",
         vehicle=vehicle,
@@ -58,66 +63,64 @@ def view_vehicle(license_plate):
 
 
 @logbook_bp.route("/update_pol_level/<int:vehicle_id>", methods=["POST"])
+@login_required
 def update_pol_level(vehicle_id):
     """Update vehicle POL (Petrol, Oil, Lubricant) level"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
+    user = db.session.get(User, session["user_id"])
+    vehicle = Vehicle.query.filter_by(id=vehicle_id, company_id=user.company_id).first_or_404()
     
-    vehicle = Vehicle.query.get_or_404(vehicle_id)
     val = request.form.get("pol_level")
     
     if val is not None and val.strip() != "":
         try:
             vehicle.pol_level = max(0, min(100, int(val)))
             db.session.commit()
-            flash(f"POL level updated to {vehicle.pol_level}%.", "success")
+            logger.info(f"POL level updated to {vehicle.pol_level}% for vehicle {vehicle.license_plate}")
+            flash(f"POL level updated to {vehicle.pol_level}%.", FlashCategory.SUCCESS)
         except ValueError:
-            flash("Invalid POL level value.", "danger")
+            logger.warning(f"Invalid POL level value for vehicle {vehicle_id}")
+            flash("Invalid POL level value.", FlashCategory.DANGER)
     else:
-        flash("No value received.", "danger")
+        flash("No value received.", FlashCategory.DANGER)
     
     return redirect(url_for("logbook.view_vehicle", license_plate=vehicle.license_plate))
 
 
 @logbook_bp.route("/toggle_vor/<int:vehicle_id>", methods=["POST"])
+@login_required
 def toggle_vor(vehicle_id):
     """Toggle vehicle VOR (Vehicle Out of Report/Service) status"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    
     user = db.session.get(User, session["user_id"])
     vehicle = db.session.get(Vehicle, vehicle_id)
     
     if not vehicle or vehicle.company_id != user.company_id:
-        flash("Access denied.", "danger")
+        flash("Access denied.", FlashCategory.DANGER)
         return redirect(url_for("core.dashboard"))
     
-    if user.role not in ["admin", "manager"]:
-        flash("Insufficient permissions.", "danger")
+    if user.role not in [Role.COMPANY_ADMIN, Role.MANAGER]:
+        flash("Insufficient permissions.", FlashCategory.DANGER)
         return redirect(url_for("logbook.view_vehicle", license_plate=vehicle.license_plate))
     
     vehicle.is_vor = not vehicle.is_vor
     db.session.commit()
     
     status_msg = "VOR" if vehicle.is_vor else "Operational"
-    flash_category = "warning" if vehicle.is_vor else "success"
+    flash_category = FlashCategory.WARNING if vehicle.is_vor else FlashCategory.SUCCESS
+    logger.info(f"Vehicle {vehicle.license_plate} VOR status toggled to {status_msg} by user {user.username}")
     flash(f"Vehicle marked as {status_msg}.", flash_category)
     
     return redirect(url_for("logbook.view_vehicle", license_plate=vehicle.license_plate))
 
 
 @logbook_bp.route("/vehicle/<int:vehicle_id>/genrun", methods=["POST"])
+@login_required
 def perform_gen_run(vehicle_id):
     """Record a generator run for a vehicle"""
-    if "user_id" not in session:
-        flash("Please log in.", "warning")
-        return redirect(url_for("auth.login"))
-    
     user = db.session.get(User, session["user_id"])
     vehicle = Vehicle.query.filter_by(id=vehicle_id, company_id=user.company_id).first()
     
     if not vehicle:
-        flash("Vehicle not found or access denied.", "danger")
+        flash("Vehicle not found or access denied.", FlashCategory.DANGER)
         return redirect(url_for("core.dashboard"))
     
     # Create a new GenRun record
@@ -130,16 +133,15 @@ def perform_gen_run(vehicle_id):
     db.session.add(genrun)
     db.session.commit()
     
-    flash("Gen Run recorded successfully.", "success")
+    logger.info(f"Gen Run recorded for vehicle {vehicle.license_plate} by user {user.username}")
+    flash("Gen Run recorded successfully.", FlashCategory.SUCCESS)
     return redirect(url_for("logbook.view_vehicle", license_plate=vehicle.license_plate))
 
 
 @logbook_bp.route("/logbook/<license_plate>", methods=["GET", "POST"])
+@login_required
 def logbook_entry(license_plate):
     """View and create logbook entries for a vehicle"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    
     current_user = db.session.get(User, session['user_id'])
     vehicle = Vehicle.query.filter_by(license_plate=license_plate).first_or_404()
     
@@ -202,7 +204,7 @@ def logbook_entry(license_plate):
                 error_msg = "Invalid time format. Please use HHMM."
         
         if error_msg:
-            flash(error_msg, "danger")
+            flash(error_msg, FlashCategory.DANGER)
             target_name, source_name, display_stores, logbook_entries, last_entry = get_view_data()
             return render_template(
                 'logbook.html',
@@ -242,7 +244,8 @@ def logbook_entry(license_plate):
         
         db.session.add(new_entry)
         db.session.commit()
-        flash("Logbook entry created successfully.", "success")
+        logger.info(f"Logbook entry created for vehicle {vehicle.license_plate} by user {current_user.username}")
+        flash("Logbook entry created successfully.", FlashCategory.SUCCESS)
         return redirect(url_for("logbook.logbook_entry", license_plate=vehicle.license_plate))
     
     # GET request - display the logbook form
@@ -265,16 +268,20 @@ def logbook_entry(license_plate):
 
 # Alias for templates that use 'logbook' instead of 'logbook.logbook_entry'
 @logbook_bp.route("/logbook_alias/<license_plate>")
+@login_required
 def logbook(license_plate):
     """Alias endpoint for templates using url_for('logbook', ...)"""
     return redirect(url_for("logbook.logbook_entry", license_plate=license_plate))
 
 
 @logbook_bp.route("/api/vehicle/<int:vehicle_id>/last_values")
+@login_required
 def vehicle_last_values(vehicle_id):
     """API endpoint to get last valid logbook values for a vehicle"""
     engine_hours = get_last_valid_logbook_value(vehicle_id, "stationary_time")
     stationary_time = get_last_valid_logbook_value(vehicle_id, "stationary_time")
+    
+    logger.info(f"Last values requested for vehicle {vehicle_id} by user {session.get('user_id')}")
     
     return jsonify({
         "engine_hours": engine_hours,
@@ -283,21 +290,22 @@ def vehicle_last_values(vehicle_id):
 
 
 @logbook_bp.route("/delete_logbook_entry/<int:entry_id>", methods=["POST"])
+@login_required
+@role_required(Role.COMPANY_ADMIN, Role.MANAGER)
 def delete_logbook_entry(entry_id):
     """Delete a logbook entry (admin only)"""
-    if "user_id" not in session:
-        return redirect(url_for("auth.login"))
-    
     current_user = db.session.get(User, session["user_id"])
-    if current_user.role != "admin":
-        flash("Unauthorized: Admins only.", "danger")
-        return redirect(url_for("core.dashboard"))
-    
     entry = Logbook.query.get_or_404(entry_id)
     license_plate = entry.vehicle.license_plate
     
-    db.session.delete(entry)
-    db.session.commit()
+    try:
+        db.session.delete(entry)
+        db.session.commit()
+        logger.info(f"Logbook entry {entry_id} deleted by user {current_user.username}")
+        flash("Logbook entry deleted.", FlashCategory.SUCCESS)
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Failed to delete logbook entry {entry_id}: {str(e)}", exc_info=True)
+        flash("Failed to delete logbook entry.", FlashCategory.ERROR)
     
-    flash("Logbook entry deleted.", "success")
     return redirect(url_for("logbook.logbook_entry", license_plate=license_plate))
