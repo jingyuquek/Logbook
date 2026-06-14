@@ -1,43 +1,50 @@
-```gitignore
+```
+# Database files
+*.db
+
 # Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-python/
+env/
 venv/
 .venv/
-.env
-.env.local
+.ENV
+.ENV.local
 .env.*
-
-# Database
-*.db
-instance/
-
-# Logs
+.env
+requirements.txt.bak
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
+*.pot
+*.pyc
+*.pyo
+*.rej
+*~
+.pytest_cache/
+.mypy_cache/
 
-# Editors
+# Testing
+.tests/
+test/
+tests/
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Dependencies
-node_modules/
-.mypy_cache/
-.pytest_cache/
-.coverage
-coverage/
-htmlcov/
-
-# Build artifacts
-dist/
-build/
-target/
-.gradle/
+*.tmp
 
 # OS
 .DS_Store
