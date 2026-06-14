@@ -1,0 +1,58 @@
+{% extends "taskbar.html" %}
+{% block title %}My History{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="header-row">
+        <h2>My Logbook History</h2>
+        <a href="{{ url_for('my_tasks') }}" class="btn-back">Back to My Tasks</a>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Vehicle</th>
+                    <th>Task</th>
+                    <th>Completed By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if entries %}
+                    {% for entry, vehicle in entries %}
+                    <tr class="{{ 'row-top-up' if entry.action_type == 'TOP UP POL' else '' }}">
+                        <td>{{ entry.date.strftime("%d %b %Y") }}</td>
+                        <td>{{ entry.start_time }} - {{ entry.end_time or "—" }}</td>
+                        <td class="muted">{{ vehicle.license_plate }}</td>
+                        <td>{{ entry.action_type }}</td>
+                        <td>{{ entry.driver_name }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr><td colspan="5" class="empty">No entries found in your history.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-footer">
+        {% if pagination.has_prev %}
+            <a href="{{ url_for('completed_tasks', page=pagination.prev_num) }}" class="nav-arrow">← Previous</a>
+        {% else %}<span class="nav-disabled">← Previous</span>{% endif %}
+        <span class="page-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+        {% if pagination.has_next %}
+            <a href="{{ url_for('completed_tasks', page=pagination.next_num) }}" class="nav-arrow">Next →</a>
+        {% else %}<span class="nav-disabled">Next →</span>{% endif %}
+    </div>
+</div>
+<style>
+    /* Retaining your existing styles */
+    .card { background: #1e1e1e; border-radius: 10px; padding: 20px; margin-top: 24px; }
+    .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th, td { padding: 12px; border-bottom: 1px solid #333; text-align: left; }
+    .row-top-up { color: #ff5252 !important; }
+    .btn-back { background: #333; color: #fff; text-decoration: none; padding: 8px 12px; border-radius: 6px; font-size: 0.8rem; }
+    .pagination-footer { display: flex; justify-content: center; align-items: center; gap: 20px; margin-top: 25px; padding-top: 15px; border-top: 1px solid #333; }
+    .nav-arrow { color: #ffb74d; text-decoration: none; font-weight: bold; padding: 8px 16px; background: #2a2a2a; border-radius: 6px; }
+</style>
+{% endblock %}
